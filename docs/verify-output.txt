@@ -1,0 +1,79 @@
+# Output of `npm run verify` (tsx scripts/verify.ts), captured 2026-09-12T20:41:00Z
+# Run against: v22.22.2, Redis server v=7.0.15 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=e53ff17674aa6190
+
+
+=== 1. Concurrency: no overselling under contention ===
+Stock: 50, concurrent requests: 500
+Accepted: 50, Rejected (INSUFFICIENT_STOCK): 450
+Final available in Redis: 0
+Wall time for 500 concurrent reservation calls: 21.36 ms
+Avg latency per reservation call: 0.0427 ms
+PASS: exactly STOCK reservations accepted, zero oversold.
+
+=== 1b. Latency: p50/p95/p99 of a single reservation call ===
+Samples: 2000 sequential reserve() calls (single connection, localhost Redis)
+p50: 0.1173 ms, p95: 0.1782 ms, p99: 0.5176 ms
+
+=== 1c. Concurrency across multiple simulated app instances ===
+10 simulated app instances x 150 requests each = 1500 total, against 200 stock
+Accepted: 200 (expected exactly 200), final available: 0 (expected 0)
+Wall time: 60.15 ms, throughput: 24938 reservations/sec
+PASS: exact quota enforced across independent connections simulating separate instances.
+
+=== 2. Saga: happy path reserves, charges, ships, confirms ===
+Order status: CONFIRMED (expected CONFIRMED)
+Order history: order.inventory_reserved -> order.payment_charged -> order.shipping_scheduled -> order.confirmed
+Stock remaining after commit: 8 (expected 8 — reservation converted to a permanent decrement)
+PASS
+
+=== 3. Saga: payment failure triggers compensation (inventory released) ===
+Order status: CANCELLED (expected CANCELLED)
+Order history: order.inventory_reserved -> order.compensating -> order.cancelled
+Stock before reservation attempt: 10, after compensation: 10 (expected equal — fully released)
+PASS: no inventory leaked after payment failure.
+
+=== 4. Saga: shipping failure triggers refund + inventory release ===
+Order status: CANCELLED (expected CANCELLED)
+Order history: order.inventory_reserved -> order.payment_charged -> order.compensating -> order.cancelled
+Stock before: 10, after rollback: 10 (expected equal)
+PASS: payment refunded and inventory released after shipping failure.
+
+=== 5. Multi-warehouse: convergence after a simulated network partition ===
+After initial stock event — A: 100, B: 100
+Partitioning node B...
+During partition (25 sales) — A: 75 (live), B: 100 (stale, unchanged)
+Node B reconnected and replayed missed events in 0.096 ms
+After reconnect — A: 75, B: 75
+PASS: both nodes converged to the same value with zero lost or duplicated events.
+
+=== SUMMARY ===
+{
+  "concurrency": {
+    "ok": true,
+    "accepted": 50,
+    "rejected": 450,
+    "elapsedMs": 21.361499999999978,
+    "throughputPerSec": 23406.595978746835
+  },
+  "latency": {
+    "samples": 2000,
+    "p50": 0.11726299999997991,
+    "p95": 0.17815300000006573,
+    "p99": 0.5175880000000461
+  },
+  "multiInstanceConcurrency": {
+    "ok": true,
+    "totalRequests": 1500,
+    "accepted": 200,
+    "elapsedMs": 60.14917700000001,
+    "throughputPerSec": 24937.997073509414
+  },
+  "sagaHappyPath": true,
+  "sagaPaymentCompensation": true,
+  "sagaShippingCompensation": true,
+  "warehouseConvergence": {
+    "ok": true,
+    "convergeMs": 0.09594300000003386,
+    "eventsReplayed": 25
+  }
+}

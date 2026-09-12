@@ -1,0 +1,61 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# HA-sized profile: 3 baseline app replicas, higher resource ceilings, wider
+# HPA range. Same namespace as base/dev — see the note in overlays/dev.
+
+resources:
+  - ../../base
+
+images:
+  - name: supply-chain-saga
+    newTag: stable
+
+patches:
+  - target:
+      kind: Deployment
+      name: app
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests: { cpu: "250m", memory: "256Mi" }
+          limits: { cpu: "1", memory: "512Mi" }
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: app
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+
+  - target:
+      kind: PodDisruptionBudget
+      name: app
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 20Gi
+
+  - target:
+      kind: StatefulSet
+      name: kafka
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 50Gi

@@ -1,0 +1,59 @@
+// Core domain types shared across the inventory, order/saga, and warehouse modules.
+
+export type WarehouseId = string;
+export type Sku = string;
+export type OrderId = string;
+
+export interface ReservationResult {
+  ok: boolean;
+  reservationId?: string;
+  remaining?: number;
+  reason?: "INSUFFICIENT_STOCK" | "INVALID_QTY";
+}
+
+export interface StockRecord {
+  sku: Sku;
+  warehouseId: WarehouseId;
+  available: number;
+  reserved: number;
+}
+
+export type OrderStatus =
+  | "CREATED"
+  | "INVENTORY_RESERVED"
+  | "PAYMENT_CHARGED"
+  | "SHIPPING_SCHEDULED"
+  | "CONFIRMED"
+  | "COMPENSATING"
+  | "CANCELLED"
+  | "FAILED";
+
+export interface OrderLine {
+  sku: Sku;
+  qty: number;
+  warehouseId: WarehouseId;
+}
+
+export interface Order {
+  id: OrderId;
+  customerId: string;
+  lines: OrderLine[];
+  amountCents: number;
+  status: OrderStatus;
+  history: OrderEvent[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderEvent {
+  type: string;
+  at: number;
+  detail?: Record<string, unknown>;
+}
+
+// Injectable failure knobs so tests/demos can force specific saga steps to fail
+// deterministically instead of relying on randomness.
+export interface FailureInjection {
+  failPaymentForOrderIds?: Set<string>;
+  failShippingForOrderIds?: Set<string>;
+}

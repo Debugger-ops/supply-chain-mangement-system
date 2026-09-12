@@ -1,0 +1,35 @@
+# Scales the app on CPU utilization. Note this scales the *API* layer;
+# InventoryService's correctness doesn't depend on how many app replicas are
+# running — that's the whole point of doing reservations as an atomic Redis
+# Lua script instead of an in-process lock (see docs/architecture.md).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app
+  namespace: supply-chain-saga
+  labels:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 120 # avoid flapping down right after a burst
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30

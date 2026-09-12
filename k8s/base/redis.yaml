@@ -1,0 +1,72 @@
+# Single-instance Redis for local/demo clusters (kind/minikube). In a real
+# deployment this would be Redis Sentinel/Cluster (or a managed Redis, e.g.
+# ElastiCache/MemoryStore) — the app only depends on the narrow RedisLike
+# interface (src/lib/redisClient.ts), so pointing REDIS_URL at a managed
+# instance instead is a config change, not a code change.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: supply-chain-saga
+  labels:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: supply-chain-saga
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: supply-chain-saga
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "192Mi"
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {} # swap for a PVC if reservation durability across pod restarts matters to you
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: supply-chain-saga
+  labels:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: redis
+spec:
+  selector:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  type: ClusterIP

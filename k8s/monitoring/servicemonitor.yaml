@@ -1,0 +1,28 @@
+# Optional — requires the Prometheus Operator's CRDs to already be installed
+# in the cluster (kube-prometheus-stack or similar). Not part of k8s/base
+# because most local kind/minikube demos won't have those CRDs; apply this
+# separately once you do:
+#   kubectl apply -f k8s/monitoring/servicemonitor.yaml
+#
+# Scrapes GET /metrics on the app Service. Note: src/metrics/metrics.ts
+# currently returns a human-readable plain-text snapshot, not real
+# Prometheus exposition format — swap in `prom-client`'s `register.metrics()`
+# (already listed in package.json's dependencies) before wiring this up for
+# real, or Prometheus will fail to parse the response.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: supply-chain-saga-app
+  namespace: supply-chain-saga
+  labels:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: supply-chain-saga
+      app.kubernetes.io/component: api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

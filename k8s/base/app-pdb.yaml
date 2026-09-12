@@ -1,0 +1,16 @@
+# Guarantees at least one app pod stays up during a voluntary disruption
+# (node drain, cluster upgrade) — pairs with replicas: 2+ and the HPA above.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app
+  namespace: supply-chain-saga
+  labels:
+    app.kubernetes.io/name: supply-chain-saga
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: supply-chain-saga
+      app.kubernetes.io/component: api

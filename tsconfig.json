@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "sourceMap": true
+  },
+  // Only src/ is compiled for the production build (`npm run build` / `npm
+  // start` / the Dockerfile) — dist/api/server.js etc. tests/ and scripts/
+  // are run directly with `tsx` (see package.json), which doesn't need a
+  // separate tsc pass, so they're deliberately left out of rootDir/outDir
+  // here to avoid a dist/src/... vs dist/... path mismatch.
+  "include": ["src"]
+}

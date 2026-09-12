@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: supply-chain-saga
+
+resources:
+  - namespace.yaml
+  - app-configmap.yaml
+  - app-secret.yaml
+  - app-deployment.yaml
+  - app-hpa.yaml
+  - app-pdb.yaml
+  - redis.yaml
+  - postgres.yaml
+  - kafka.yaml
+  - networkpolicy.yaml
+
+# Generates the postgres-init-schema ConfigMap referenced by postgres.yaml
+# directly from docs/schema.sql, so the schema only ever lives in one file.
+configMapGenerator:
+  - name: postgres-init-schema
+    files:
+      - schema.sql=../../docs/schema.sql
+
+generatorOptions:
+  # Without this, kustomize appends a content hash to the generated
+  # ConfigMap's name (postgres-init-schema-abc123) and rewrites every
+  # reference to it automatically. That's usually what you want (it forces a
+  # pod restart whenever the schema changes) — turned off here only so
+  # postgres.yaml's literal "postgres-init-schema" name reference stays
+  # simple to read for a demo/resume project.
+  disableNameSuffixHash: true
+
+commonLabels:
+  app.kubernetes.io/part-of: supply-chain-saga
