@@ -9,23 +9,35 @@
 <body>
   <div class="page">
     <header>
-      <div>
+      <div class="header-title">
         <h1>Supply Chain Saga</h1>
         <div class="sub">Distributed inventory reservation &amp; saga-based order fulfillment — live dashboard</div>
       </div>
-      <div class="conn"><span class="dot" id="connDot"></span><span id="connLabel">connecting…</span></div>
+      <div class="header-right">
+        <div class="status-cluster">
+          <span class="last-updated" id="lastUpdated"></span>
+          <button type="button" class="btn icon-btn" id="refreshBtn" title="Refresh now" aria-label="Refresh now">↻</button>
+          <button type="button" class="btn icon-btn" id="themeToggle" title="Toggle light/dark theme" aria-label="Toggle light/dark theme">☀</button>
+          <div class="conn"><span class="dot" id="connDot"></span><span id="connLabel">connecting…</span></div>
+        </div>
+      </div>
     </header>
 
     <nav id="tabs" role="tablist" aria-label="Dashboard sections">
-      <button data-tab="overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview" id="tabbtn-overview">Overview</button>
-      <button data-tab="orders" role="tab" aria-selected="false" aria-controls="tab-orders" id="tabbtn-orders">Orders</button>
-      <button data-tab="inventory" role="tab" aria-selected="false" aria-controls="tab-inventory" id="tabbtn-inventory">Inventory</button>
-      <button data-tab="feed" role="tab" aria-selected="false" aria-controls="tab-feed" id="tabbtn-feed">Live Feed</button>
+      <button data-tab="overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview" id="tabbtn-overview">Overview<span class="kbd">1</span></button>
+      <button data-tab="orders" role="tab" aria-selected="false" aria-controls="tab-orders" id="tabbtn-orders">Orders<span class="kbd">2</span></button>
+      <button data-tab="inventory" role="tab" aria-selected="false" aria-controls="tab-inventory" id="tabbtn-inventory">Inventory<span class="kbd">3</span></button>
+      <button data-tab="feed" role="tab" aria-selected="false" aria-controls="tab-feed" id="tabbtn-feed">Live Feed<span class="kbd">4</span></button>
     </nav>
 
     <!-- OVERVIEW -->
     <section class="tab active" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview">
       <div class="cards" id="kpiCards"></div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Status distribution</h2></div>
+        <div class="stat-bars" id="statusBars"></div>
+      </div>
 
       <div class="panel">
         <h2>System profile</h2>
@@ -69,7 +81,7 @@
     <!-- ORDERS -->
     <section class="tab" id="tab-orders" role="tabpanel" aria-labelledby="tabbtn-orders">
       <div class="toolbar">
-        <input id="orderSearch" type="text" placeholder="Search by order id or customer id…" aria-label="Search orders" />
+        <input id="orderSearch" type="text" placeholder="Search by order id or customer id… (press /)" aria-label="Search orders" />
         <select id="statusFilter" aria-label="Filter by status">
           <option value="">All statuses</option>
           <option value="CONFIRMED">CONFIRMED</option>
@@ -81,13 +93,43 @@
           <option value="PAYMENT_CHARGED">PAYMENT_CHARGED</option>
           <option value="SHIPPING_SCHEDULED">SHIPPING_SCHEDULED</option>
         </select>
+        <button type="button" class="btn" id="exportCsvBtn">⬇ Export CSV</button>
+        <button type="button" class="btn btn-primary" id="newOrderToggle">+ New order</button>
         <span class="count" id="orderCount"></span>
       </div>
+
+      <div class="panel" id="newOrderPanel" style="display:none;">
+        <div class="panel-head"><h2>Create test order</h2></div>
+        <form id="newOrderForm">
+          <div class="form-row">
+            <div class="form-col">
+              <label for="ofCustomer">Customer ID</label>
+              <input id="ofCustomer" type="text" placeholder="cust_123" required />
+            </div>
+          </div>
+          <div id="orderFormLines"></div>
+          <div class="form-actions">
+            <button type="button" class="btn" id="addLineBtn">+ Add line</button>
+            <span class="spacer"></span>
+            <button type="submit" class="btn btn-primary">Submit order</button>
+            <button type="button" class="btn" id="cancelOrderFormBtn">Cancel</button>
+          </div>
+          <div id="orderFormMsg"></div>
+        </form>
+      </div>
+
       <div class="panel">
         <div class="table-scroll">
-          <table>
+          <table id="ordersTable">
             <thead>
-              <tr><th>Order</th><th>Customer</th><th>Lines</th><th>Amount</th><th>Status</th><th>Updated</th></tr>
+              <tr>
+                <th>Order</th>
+                <th class="sortable" data-sort="customerId">Customer<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="lines">Lines<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="amount">Amount<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="status">Status<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="updatedAt">Updated<span class="arrow">↕</span></th>
+              </tr>
             </thead>
             <tbody id="ordersBody"></tbody>
           </table>
@@ -99,14 +141,22 @@
 
     <!-- INVENTORY -->
     <section class="tab" id="tab-inventory" role="tabpanel" aria-labelledby="tabbtn-inventory">
+      <div class="inv-summary" id="invSummary"></div>
+      <div id="invAlert"></div>
       <div class="toolbar">
-        <input id="invSearch" type="text" placeholder="Search by warehouse or SKU…" aria-label="Search inventory" />
+        <input id="invSearch" type="text" placeholder="Search by warehouse or SKU… (press /)" aria-label="Search inventory" />
         <span class="count" id="invCount"></span>
       </div>
       <div class="panel">
         <div class="table-scroll">
-          <table>
-            <thead><tr><th>Warehouse</th><th>SKU</th><th>Available</th></tr></thead>
+          <table id="inventoryTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="warehouseId">Warehouse<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="sku">SKU<span class="arrow">↕</span></th>
+                <th class="sortable" data-sort="available">Available<span class="arrow">↕</span></th>
+              </tr>
+            </thead>
             <tbody id="invBody"></tbody>
           </table>
         </div>
@@ -119,15 +169,25 @@
     <!-- LIVE FEED -->
     <section class="tab" id="tab-feed" role="tabpanel" aria-labelledby="tabbtn-feed">
       <div class="panel">
-        <h2>Saga transitions, streamed live</h2>
-        <p style="margin-bottom:14px;">Every saga transition streams here over Server-Sent Events (/api/events/stream) the moment it happens. Create an order via <code>POST /api/orders</code> to see it.</p>
-        <div id="feed"><div class="empty" id="feedEmpty">Waiting for events…</div></div>
+        <div class="panel-head">
+          <h2>Saga transitions, streamed live</h2>
+        </div>
+        <div class="toolbar">
+          <select id="feedTypeFilter" aria-label="Filter by event type"><option value="">All event types</option></select>
+          <button type="button" class="btn" id="feedPauseBtn" aria-pressed="false">⏸ Pause</button>
+          <button type="button" class="btn" id="feedClearBtn">Clear</button>
+          <span class="count" id="feedCount"></span>
+        </div>
+        <p style="margin-bottom:14px;">Every saga transition streams here over Server-Sent Events (/api/events/stream) the moment it happens. Create an order via <code>POST /api/orders</code> or the form on the Orders tab to see it.</p>
+        <div id="feed"></div>
       </div>
     </section>
   </div>
 
   <script>
-    // ---------- tabs ----------
+    // ============================================================
+    // Tabs
+    // ============================================================
     const tabs = document.querySelectorAll("#tabs button");
     tabs.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -139,17 +199,112 @@
       });
     });
 
-    // ---------- state ----------
+    // ============================================================
+    // Theme
+    // ============================================================
+    const root = document.documentElement;
+    let currentTheme = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    function applyTheme(theme) {
+      root.dataset.theme = theme;
+      document.getElementById("themeToggle").textContent = theme === "light" ? "☾" : "☀";
+    }
+    applyTheme(currentTheme);
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      currentTheme = currentTheme === "dark" ? "light" : "dark";
+      applyTheme(currentTheme);
+    });
+
+    // ============================================================
+    // State
+    // ============================================================
     let orders = [];
     let inventory = [];
     let metricsSummary = null;
     let selectedOrderId = null;
+    let previousOrdersById = new Map();
+    let justUpdatedIds = new Set();
+    let lastUpdatedAt = null;
+
+    const sortState = {
+      orders: { field: "updatedAt", dir: "desc" },
+      inventory: { field: "available", dir: "asc" },
+    };
+
+    const STATUS_COLOR = {
+      CONFIRMED: "var(--green)",
+      CANCELLED: "var(--red)",
+      FAILED: "var(--red)",
+      COMPENSATING: "var(--orange)",
+      CREATED: "var(--blue)",
+      INVENTORY_RESERVED: "var(--blue)",
+      PAYMENT_CHARGED: "var(--blue)",
+      SHIPPING_SCHEDULED: "var(--blue)",
+    };
 
     const fmtMoney = (cents) => "$" + (cents / 100).toFixed(2);
     const fmtTime = (ms) => new Date(ms).toLocaleString();
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-    // ---------- KPI cards ----------
+    function timeAgo(ms) {
+      const diff = Math.max(0, Date.now() - ms);
+      const s = Math.floor(diff / 1000);
+      if (s < 60) return `${s}s ago`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
+    }
+
+    async function copyText(text, btn) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Clipboard API unavailable (e.g. non-HTTPS context) — fail silently.
+      }
+      const original = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    }
+
+    // ============================================================
+    // Sortable table headers (shared helper for orders + inventory)
+    // ============================================================
+    function updateSortIndicators(tableId, sortKey) {
+      const state = sortState[sortKey];
+      document.querySelectorAll(`#${tableId} thead th.sortable`).forEach((th) => {
+        const arrow = th.querySelector(".arrow");
+        if (th.dataset.sort === state.field) {
+          th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
+          arrow.textContent = state.dir === "asc" ? "▲" : "▼";
+        } else {
+          th.removeAttribute("aria-sort");
+          arrow.textContent = "↕";
+        }
+      });
+    }
+
+    function bindSortableHeaders(tableId, sortKey, onChange) {
+      document.querySelectorAll(`#${tableId} thead th.sortable`).forEach((th) => {
+        th.addEventListener("click", () => {
+          const field = th.dataset.sort;
+          const state = sortState[sortKey];
+          if (state.field === field) {
+            state.dir = state.dir === "asc" ? "desc" : "asc";
+          } else {
+            state.field = field;
+            state.dir = field === "updatedAt" || field === "amount" || field === "available" ? "desc" : "asc";
+          }
+          updateSortIndicators(tableId, sortKey);
+          onChange();
+        });
+      });
+      updateSortIndicators(tableId, sortKey);
+    }
+
+    // ============================================================
+    // KPI cards + status distribution
+    // ============================================================
     function renderKpis() {
       const total = orders.length;
       const byStatus = {};
@@ -178,14 +333,45 @@
         </div>`).join("");
     }
 
-    // ---------- orders table ----------
+    function renderStatusDistribution() {
+      const el = document.getElementById("statusBars");
+      if (!orders.length) { el.innerHTML = '<div class="stat-empty">No orders yet.</div>'; return; }
+      const counts = {};
+      for (const o of orders) counts[o.status] = (counts[o.status] || 0) + 1;
+      const max = Math.max(...Object.values(counts));
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      el.innerHTML = entries.map(([status, count]) => `
+        <div class="stat-bar-row">
+          <span class="badge ${status}">${status}</span>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${Math.round((count / max) * 100)}%;background:${STATUS_COLOR[status] || "var(--gray)"}"></div></div>
+          <span class="stat-bar-count">${count}</span>
+        </div>`).join("");
+    }
+
+    // ============================================================
+    // Orders table
+    // ============================================================
+    function compareOrders(a, b, field) {
+      let av, bv;
+      switch (field) {
+        case "lines": av = a.lines.length; bv = b.lines.length; break;
+        case "amount": av = a.amountCents; bv = b.amountCents; break;
+        default: av = a[field]; bv = b[field];
+      }
+      if (typeof av === "string") return av.localeCompare(bv);
+      return av - bv;
+    }
+
     function filteredOrders() {
       const q = document.getElementById("orderSearch").value.trim().toLowerCase();
       const status = document.getElementById("statusFilter").value;
-      return orders
+      const { field, dir } = sortState.orders;
+      const list = orders
         .filter((o) => !status || o.status === status)
         .filter((o) => !q || o.id.toLowerCase().includes(q) || o.customerId.toLowerCase().includes(q))
-        .sort((a, b) => b.updatedAt - a.updatedAt);
+        .sort((a, b) => compareOrders(a, b, field));
+      if (dir === "desc") list.reverse();
+      return list;
     }
 
     function renderOrders() {
@@ -194,13 +380,13 @@
       const body = document.getElementById("ordersBody");
       document.getElementById("ordersEmpty").style.display = list.length ? "none" : "block";
       body.innerHTML = list.map((o) => `
-        <tr data-id="${o.id}" class="${o.id === selectedOrderId ? "selected" : ""}" tabindex="0">
+        <tr data-id="${o.id}" class="${[o.id === selectedOrderId ? "selected" : "", justUpdatedIds.has(o.id) ? "just-updated" : ""].filter(Boolean).join(" ")}" tabindex="0">
           <td class="mono" data-label="Order">${o.id.slice(0, 8)}</td>
           <td data-label="Customer">${escapeHtml(o.customerId)}</td>
           <td class="mono" data-label="Lines">${o.lines.length}</td>
           <td class="amount" data-label="Amount">${fmtMoney(o.amountCents)}</td>
           <td data-label="Status"><span class="badge ${o.status}">${o.status}</span></td>
-          <td class="mono" data-label="Updated">${fmtTime(o.updatedAt)}</td>
+          <td class="mono" data-label="Updated" title="${escapeHtml(timeAgo(o.updatedAt))}">${fmtTime(o.updatedAt)}</td>
         </tr>`).join("");
 
       body.querySelectorAll("tr").forEach((tr) => {
@@ -233,14 +419,33 @@
           <div class="idline">Order <strong>${order.id}</strong> — ${escapeHtml(order.customerId)}</div>
           <div class="idline">created ${fmtTime(order.createdAt)}</div>
         </div>
+        <div class="actions">
+          <button type="button" class="btn" id="copyIdBtn">Copy ID</button>
+          <button type="button" class="btn" id="copyJsonBtn">Copy JSON</button>
+        </div>
         <ul class="lines-list">${lines}</ul>
         <ul class="timeline">${timeline}</ul>`;
+      el.querySelector("#copyIdBtn").addEventListener("click", (e) => copyText(order.id, e.currentTarget));
+      el.querySelector("#copyJsonBtn").addEventListener("click", (e) => copyText(JSON.stringify(order, null, 2), e.currentTarget));
     }
 
-    // ---------- inventory table ----------
+    // ============================================================
+    // Inventory table
+    // ============================================================
+    function compareInventory(a, b, field) {
+      const av = a[field], bv = b[field];
+      if (typeof av === "string") return av.localeCompare(bv);
+      return av - bv;
+    }
+
     function filteredInventory() {
       const q = document.getElementById("invSearch").value.trim().toLowerCase();
-      return inventory.filter((r) => !q || r.warehouseId.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q));
+      const { field, dir } = sortState.inventory;
+      const list = inventory
+        .filter((r) => !q || r.warehouseId.toLowerCase().includes(q) || r.sku.toLowerCase().includes(q))
+        .sort((a, b) => compareInventory(a, b, field));
+      if (dir === "desc") list.reverse();
+      return list;
     }
 
     function renderInventory() {
@@ -265,11 +470,132 @@
       }).join("");
     }
 
-    // ---------- data loading ----------
+    function renderInventorySummary() {
+      const summaryEl = document.getElementById("invSummary");
+      const alertEl = document.getElementById("invAlert");
+      if (!inventory.length) { summaryEl.innerHTML = ""; alertEl.innerHTML = ""; return; }
+      const totalUnits = inventory.reduce((s, r) => s + r.available, 0);
+      const warehouses = new Set(inventory.map((r) => r.warehouseId)).size;
+      const max = Math.max(1, ...inventory.map((r) => r.available));
+      const lowStock = inventory.filter((r) => r.available === 0 || r.available / max < 0.2);
+      summaryEl.innerHTML = `
+        <div class="card"><div class="label">Total units</div><div class="value accent">${totalUnits}</div></div>
+        <div class="card"><div class="label">Warehouses</div><div class="value">${warehouses}</div></div>
+        <div class="card"><div class="label">SKU rows</div><div class="value">${inventory.length}</div></div>
+        <div class="card"><div class="label">Low / out of stock</div><div class="value ${lowStock.length ? "orange" : "green"}">${lowStock.length}</div></div>`;
+      alertEl.innerHTML = lowStock.length
+        ? `<div class="alert-banner">⚠ <strong>${lowStock.length}</strong> SKU${lowStock.length === 1 ? "" : "s"} running low — ${lowStock.slice(0, 5).map((r) => escapeHtml(r.sku)).join(", ")}${lowStock.length > 5 ? "…" : ""}</div>`
+        : "";
+    }
+
+    // ============================================================
+    // Create-order form
+    // ============================================================
+    function createLineRow() {
+      const row = document.createElement("div");
+      row.className = "line-item";
+      row.innerHTML = `
+        <div class="form-col"><label>SKU</label><input type="text" class="lf-sku" placeholder="sku-001" required /></div>
+        <div class="form-col"><label>Qty</label><input type="number" class="lf-qty" min="1" value="1" required /></div>
+        <div class="form-col"><label>Warehouse</label><input type="text" class="lf-wh" placeholder="wh-east" required /></div>
+        <button type="button" class="btn btn-danger" aria-label="Remove line">✕</button>`;
+      row.querySelector("button").addEventListener("click", () => {
+        if (document.querySelectorAll("#orderFormLines .line-item").length > 1) row.remove();
+      });
+      return row;
+    }
+
+    document.getElementById("orderFormLines").appendChild(createLineRow());
+    document.getElementById("addLineBtn").addEventListener("click", () => {
+      document.getElementById("orderFormLines").appendChild(createLineRow());
+    });
+
+    document.getElementById("newOrderToggle").addEventListener("click", () => {
+      const panel = document.getElementById("newOrderPanel");
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+      if (panel.style.display === "block") document.getElementById("ofCustomer").focus();
+    });
+    document.getElementById("cancelOrderFormBtn").addEventListener("click", () => {
+      document.getElementById("newOrderPanel").style.display = "none";
+    });
+
+    document.getElementById("newOrderForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById("orderFormMsg");
+      msgEl.innerHTML = "";
+      const customerId = document.getElementById("ofCustomer").value.trim();
+      const lineRows = [...document.querySelectorAll("#orderFormLines .line-item")];
+      const lines = lineRows.map((row) => ({
+        sku: row.querySelector(".lf-sku").value.trim(),
+        qty: Number(row.querySelector(".lf-qty").value),
+        warehouseId: row.querySelector(".lf-wh").value.trim(),
+      }));
+      if (!customerId || lines.some((l) => !l.sku || !l.warehouseId || !l.qty || l.qty < 1)) {
+        msgEl.innerHTML = '<div class="form-msg error">Fill in customer ID and every line (SKU, quantity, warehouse).</div>';
+        return;
+      }
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customerId, lines }),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let message = raw;
+          try { const parsed = JSON.parse(raw); message = parsed.message || parsed.error || raw; } catch {}
+          throw new Error(message || `Request failed (${res.status})`);
+        }
+        msgEl.innerHTML = '<div class="form-msg success">Order created.</div>';
+        document.getElementById("ofCustomer").value = "";
+        document.getElementById("orderFormLines").innerHTML = "";
+        document.getElementById("orderFormLines").appendChild(createLineRow());
+        refreshAll();
+      } catch (err) {
+        msgEl.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || "Could not create order.")}</div>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // ============================================================
+    // CSV export
+    // ============================================================
+    document.getElementById("exportCsvBtn").addEventListener("click", () => {
+      const list = filteredOrders();
+      const header = ["order_id", "customer_id", "lines", "amount_usd", "status", "updated_at"];
+      const rows = list.map((o) => [
+        o.id, o.customerId, o.lines.length, (o.amountCents / 100).toFixed(2), o.status, new Date(o.updatedAt).toISOString(),
+      ]);
+      const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // ============================================================
+    // Data loading
+    // ============================================================
     async function loadOrders() {
       const res = await fetch("/api/orders");
-      orders = await res.json();
+      const newOrders = await res.json();
+      justUpdatedIds = new Set();
+      for (const o of newOrders) {
+        const prevUpdatedAt = previousOrdersById.get(o.id);
+        if (prevUpdatedAt !== undefined && prevUpdatedAt !== o.updatedAt) justUpdatedIds.add(o.id);
+      }
+      previousOrdersById = new Map(newOrders.map((o) => [o.id, o.updatedAt]));
+      orders = newOrders;
       renderKpis();
+      renderStatusDistribution();
       renderOrders();
       renderOrderDetail();
     }
@@ -277,27 +603,92 @@
       const res = await fetch("/api/inventory");
       inventory = await res.json();
       renderInventory();
+      renderInventorySummary();
     }
     async function loadMetrics() {
       const res = await fetch("/api/metrics/summary");
       metricsSummary = await res.json();
       renderKpis();
     }
-    function refreshAll() {
-      loadOrders();
-      loadInventory();
-      loadMetrics();
+    async function refreshAll() {
+      await Promise.allSettled([loadOrders(), loadInventory(), loadMetrics()]);
+      lastUpdatedAt = Date.now();
+      updateLastUpdatedLabel();
     }
+
+    function updateLastUpdatedLabel() {
+      const el = document.getElementById("lastUpdated");
+      if (!lastUpdatedAt) { el.textContent = ""; return; }
+      const secs = Math.round((Date.now() - lastUpdatedAt) / 1000);
+      el.textContent = secs < 2 ? "updated just now" : `updated ${secs}s ago`;
+    }
+    setInterval(updateLastUpdatedLabel, 1000);
+    document.getElementById("refreshBtn").addEventListener("click", () => refreshAll());
 
     document.getElementById("orderSearch").addEventListener("input", renderOrders);
     document.getElementById("statusFilter").addEventListener("change", renderOrders);
     document.getElementById("invSearch").addEventListener("input", renderInventory);
 
-    // ---------- live feed + SSE ----------
+    bindSortableHeaders("ordersTable", "orders", renderOrders);
+    bindSortableHeaders("inventoryTable", "inventory", renderInventory);
+
+    // ============================================================
+    // Live feed + SSE
+    // ============================================================
     const feed = document.getElementById("feed");
-    const feedEmpty = document.getElementById("feedEmpty");
     const connDot = document.getElementById("connDot");
     const connLabel = document.getElementById("connLabel");
+
+    let feedEvents = []; // newest first, capped at 200
+    let feedPaused = false;
+    let feedTypeFilterValue = "";
+    const feedTypesSeen = new Set();
+
+    function feedRowHtml(event) {
+      const cls = event.type.includes("confirmed") ? "confirmed"
+        : event.type.includes("cancelled") ? "cancelled"
+        : event.type.includes("failed") ? "failed"
+        : event.type.includes("compensating") ? "compensating"
+        : "";
+      const time = new Date(event.at).toLocaleTimeString();
+      return `<div class="feedrow ${cls}">
+        <span class="time">${escapeHtml(time)}</span>
+        <span class="type">${escapeHtml(event.type)}</span>
+        <span class="payload">${escapeHtml(JSON.stringify(event.payload))}</span>
+      </div>`;
+    }
+
+    function renderFeed() {
+      const list = feedTypeFilterValue ? feedEvents.filter((e) => e.type === feedTypeFilterValue) : feedEvents;
+      document.getElementById("feedCount").textContent = feedEvents.length
+        ? (feedTypeFilterValue ? `${list.length} of ${feedEvents.length}` : `${feedEvents.length}`)
+        : "";
+      feed.innerHTML = list.length ? list.map(feedRowHtml).join("") : `<div class="empty">${feedEvents.length ? "No events match." : "Waiting for events…"}</div>`;
+    }
+
+    function updateFeedTypeOptions(type) {
+      if (feedTypesSeen.has(type)) return;
+      feedTypesSeen.add(type);
+      const opt = document.createElement("option");
+      opt.value = type;
+      opt.textContent = type;
+      document.getElementById("feedTypeFilter").appendChild(opt);
+    }
+
+    document.getElementById("feedTypeFilter").addEventListener("change", (e) => {
+      feedTypeFilterValue = e.target.value;
+      renderFeed();
+    });
+    document.getElementById("feedPauseBtn").addEventListener("click", (e) => {
+      feedPaused = !feedPaused;
+      e.currentTarget.textContent = feedPaused ? "▶ Resume" : "⏸ Pause";
+      e.currentTarget.setAttribute("aria-pressed", String(feedPaused));
+      e.currentTarget.classList.toggle("active", feedPaused);
+    });
+    document.getElementById("feedClearBtn").addEventListener("click", () => {
+      feedEvents = [];
+      renderFeed();
+    });
 
     let refreshTimer = null;
     function scheduleRefresh() {
@@ -312,26 +703,41 @@
     source.onerror = () => { connDot.className = "dot down"; connLabel.textContent = "reconnecting…"; };
 
     source.onmessage = (msg) => {
-      if (feedEmpty) feedEmpty.remove();
       let event;
       try { event = JSON.parse(msg.data); } catch { return; }
-      const row = document.createElement("div");
-      const cls = event.type.includes("confirmed") ? "confirmed"
-        : event.type.includes("cancelled") ? "cancelled"
-        : event.type.includes("failed") ? "failed"
-        : event.type.includes("compensating") ? "compensating"
-        : "";
-      row.className = "feedrow " + cls;
-      const time = new Date(event.at).toLocaleTimeString();
-      row.innerHTML =
-        '<span class="time">' + escapeHtml(time) + '</span>' +
-        '<span class="type">' + escapeHtml(event.type) + '</span>' +
-        '<span class="payload">' + escapeHtml(JSON.stringify(event.payload)) + '</span>';
-      feed.prepend(row);
-      while (feed.children.length > 200) feed.removeChild(feed.lastChild);
+      updateFeedTypeOptions(event.type);
+      feedEvents.unshift(event);
+      if (feedEvents.length > 200) feedEvents.length = 200;
+      if (!feedPaused) renderFeed();
       scheduleRefresh();
     };
 
+    // ============================================================
+    // Keyboard shortcuts: 1-4 switch tabs, "/" focuses search, Esc clears
+    // ============================================================
+    document.addEventListener("keydown", (e) => {
+      const tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "select" || tag === "textarea") return;
+      if (["1", "2", "3", "4"].includes(e.key)) {
+        tabs[Number(e.key) - 1]?.click();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        const activeTab = document.querySelector("#tabs button.active").dataset.tab;
+        const input = activeTab === "orders" ? document.getElementById("orderSearch")
+          : activeTab === "inventory" ? document.getElementById("invSearch")
+          : null;
+        input?.focus();
+      } else if (e.key === "Escape" && selectedOrderId) {
+        selectedOrderId = null;
+        renderOrders();
+        renderOrderDetail();
+      }
+    });
+
+    // ============================================================
+    // Init
+    // ============================================================
+    renderFeed();
     refreshAll();
   </script>
 </body>
