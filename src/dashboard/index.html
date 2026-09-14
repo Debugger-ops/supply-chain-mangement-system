@@ -4,256 +4,136 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Supply Chain Saga — Dashboard</title>
-<style>
-  :root {
-    color-scheme: dark;
-    --bg: #0b0f14;
-    --panel: #121820;
-    --panel-2: #161d27;
-    --border: #223041;
-    --text: #d8e1e8;
-    --dim: #6b7f8f;
-    --accent: #9fd3ff;
-    --green: #38c172;
-    --red: #e3342f;
-    --orange: #f6993f;
-    --blue: #4a90d9;
-    --gray: #57708a;
-  }
-  * { box-sizing: border-box; }
-  body {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    background: var(--bg);
-    color: var(--text);
-    margin: 0;
-    padding: 0 20px 40px;
-  }
-  header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 22px 0 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  h1 { font-size: 16px; font-weight: 600; color: var(--accent); margin: 0; }
-  .sub { color: var(--dim); font-size: 12px; margin-top: 4px; }
-  .conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); }
-  .dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .dot.down { background: var(--red); }
-
-  nav { display: flex; gap: 4px; margin: 16px 0; flex-wrap: wrap; }
-  nav button {
-    font-family: inherit; font-size: 12px; color: var(--dim); background: transparent;
-    border: 1px solid var(--border); border-radius: 6px; padding: 7px 14px; cursor: pointer;
-  }
-  nav button.active { color: var(--accent); border-color: var(--accent); background: #16202b; }
-  nav button:hover { color: var(--text); }
-
-  section.tab { display: none; }
-  section.tab.active { display: block; }
-
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-  .card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dim); margin-bottom: 6px; }
-  .card .value { font-size: 22px; font-weight: 600; color: var(--text); }
-  .card .value.green { color: var(--green); }
-  .card .value.red { color: var(--red); }
-  .card .value.orange { color: var(--orange); }
-  .card .value.accent { color: var(--accent); }
-  .card .foot { font-size: 10px; color: var(--dim); margin-top: 4px; }
-
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .panel h2 { font-size: 13px; color: var(--accent); margin: 0 0 12px; font-weight: 600; }
-  .panel p { font-size: 12px; line-height: 1.6; color: var(--text); margin: 0 0 10px; }
-  .panel p:last-child { margin-bottom: 0; }
-
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .chip { font-size: 11px; color: var(--accent); background: #16202b; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
-
-  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-  .toolbar input, .toolbar select {
-    font-family: inherit; font-size: 12px; color: var(--text); background: var(--panel-2);
-    border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px;
-  }
-  .toolbar input { flex: 1; min-width: 160px; }
-  .toolbar .count { font-size: 11px; color: var(--dim); white-space: nowrap; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  thead th {
-    text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--dim); border-bottom: 1px solid var(--border); padding: 8px 10px; font-weight: 500;
-  }
-  tbody tr { cursor: pointer; border-bottom: 1px solid #182230; }
-  tbody tr:hover { background: #16202b; }
-  tbody tr.selected { background: #182838; }
-  td { padding: 9px 10px; vertical-align: middle; }
-  td.mono { color: var(--dim); }
-  td.amount { text-align: right; font-variant-numeric: tabular-nums; }
-
-  .badge { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
-  .badge.CONFIRMED { color: var(--green); border-color: var(--green); background: rgba(56,193,114,0.08); }
-  .badge.CANCELLED, .badge.FAILED { color: var(--red); border-color: var(--red); background: rgba(227,52,47,0.08); }
-  .badge.COMPENSATING { color: var(--orange); border-color: var(--orange); background: rgba(246,153,63,0.08); }
-  .badge.CREATED, .badge.INVENTORY_RESERVED, .badge.PAYMENT_CHARGED, .badge.SHIPPING_SCHEDULED {
-    color: var(--blue); border-color: var(--blue); background: rgba(74,144,217,0.08);
-  }
-
-  .empty { color: var(--dim); font-size: 12px; padding: 20px 0; text-align: center; }
-
-  .detail { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 14px; }
-  .detail .row1 { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-  .detail .idline { color: var(--dim); font-size: 11px; }
-  .lines-list { list-style: none; margin: 0 0 12px; padding: 0; font-size: 12px; }
-  .lines-list li { padding: 4px 0; color: var(--text); }
-  .lines-list .sku { color: var(--accent); }
-  .timeline { list-style: none; margin: 0; padding: 0; }
-  .timeline li { display: grid; grid-template-columns: 90px 190px 1fr; gap: 10px; padding: 6px 0; border-bottom: 1px solid #182230; font-size: 11px; }
-  .timeline .t-time { color: var(--dim); }
-  .timeline .t-type { color: var(--accent); }
-  .timeline .t-detail { color: #a8b8c4; overflow-wrap: anywhere; }
-
-  .inv-bar-wrap { display: flex; align-items: center; gap: 8px; }
-  .inv-bar { flex: 1; height: 6px; background: #1a2430; border-radius: 3px; overflow: hidden; max-width: 160px; }
-  .inv-bar > span { display: block; height: 100%; background: var(--accent); }
-  .inv-bar > span.low { background: var(--orange); }
-  .inv-bar > span.empty { background: var(--red); }
-
-  #feed { display: flex; flex-direction: column; gap: 6px; }
-  .feedrow { display: grid; grid-template-columns: 90px 190px 1fr; gap: 12px; padding: 8px 10px; border-radius: 6px; background: var(--panel-2); border-left: 3px solid #2a3a4a; font-size: 12px; }
-  .feedrow.confirmed { border-left-color: var(--green); }
-  .feedrow.cancelled, .feedrow.failed { border-left-color: var(--red); }
-  .feedrow.compensating { border-left-color: var(--orange); }
-  .feedrow .time { color: var(--dim); }
-  .feedrow .type { color: var(--accent); }
-  .feedrow .payload { color: #a8b8c4; overflow-wrap: anywhere; }
-
-  a { color: var(--accent); }
-</style>
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Supply Chain Saga</h1>
-      <div class="sub">Distributed inventory reservation &amp; saga-based order fulfillment — live dashboard</div>
-    </div>
-    <div class="conn"><span class="dot" id="connDot"></span><span id="connLabel">connecting…</span></div>
-  </header>
-
-  <nav id="tabs">
-    <button data-tab="overview" class="active">Overview</button>
-    <button data-tab="orders">Orders</button>
-    <button data-tab="inventory">Inventory</button>
-    <button data-tab="feed">Live Feed</button>
-  </nav>
-
-  <!-- OVERVIEW -->
-  <section class="tab active" id="tab-overview">
-    <div class="cards" id="kpiCards"></div>
-
-    <div class="panel">
-      <h2>System profile</h2>
-      <p>
-        A distributed inventory reservation and order-fulfillment system built around two
-        failure modes that break real supply-chain backends: overselling stock under
-        concurrency, and orders left half-finished when a downstream step fails.
-      </p>
-      <p>
-        <strong>Atomic reservation.</strong> Stock check-and-decrement runs as a single Redis
-        Lua script, so concurrent callers — including multiple app instances — can never
-        oversell. Verified: 500 concurrent reservation attempts against 50 units of stock
-        accept exactly 50, every time.
-      </p>
-      <p>
-        <strong>Saga orchestration.</strong> <code>reserve inventory → charge payment →
-        schedule shipping → confirm</code>, with an explicit, idempotent compensating
-        transaction for every step — a failure partway through cleanly unwinds everything
-        that already succeeded instead of leaking state.
-      </p>
-      <p>
-        <strong>Multi-warehouse convergence.</strong> Each warehouse consumes a shared event
-        log through its own consumer-group cursor; a node that drops offline (simulated
-        network partition) replays what it missed on reconnect and converges to the same
-        state as every other node.
-      </p>
-      <div class="chips">
-        <span class="chip">Node.js / TypeScript</span>
-        <span class="chip">Express</span>
-        <span class="chip">Redis (Lua scripts)</span>
-        <span class="chip">Kafka</span>
-        <span class="chip">Postgres (schema ready)</span>
-        <span class="chip">Zod</span>
-        <span class="chip">Vitest</span>
-        <span class="chip">Docker / Kubernetes</span>
-        <span class="chip">Server-Sent Events</span>
+  <div class="page">
+    <header>
+      <div>
+        <h1>Supply Chain Saga</h1>
+        <div class="sub">Distributed inventory reservation &amp; saga-based order fulfillment — live dashboard</div>
       </div>
-    </div>
-  </section>
+      <div class="conn"><span class="dot" id="connDot"></span><span id="connLabel">connecting…</span></div>
+    </header>
 
-  <!-- ORDERS -->
-  <section class="tab" id="tab-orders">
-    <div class="toolbar">
-      <input id="orderSearch" type="text" placeholder="Search by order id or customer id…" />
-      <select id="statusFilter">
-        <option value="">All statuses</option>
-        <option value="CONFIRMED">CONFIRMED</option>
-        <option value="CANCELLED">CANCELLED</option>
-        <option value="FAILED">FAILED</option>
-        <option value="COMPENSATING">COMPENSATING</option>
-        <option value="CREATED">CREATED</option>
-        <option value="INVENTORY_RESERVED">INVENTORY_RESERVED</option>
-        <option value="PAYMENT_CHARGED">PAYMENT_CHARGED</option>
-        <option value="SHIPPING_SCHEDULED">SHIPPING_SCHEDULED</option>
-      </select>
-      <span class="count" id="orderCount"></span>
-    </div>
-    <div class="panel">
-      <table>
-        <thead>
-          <tr><th>Order</th><th>Customer</th><th>Lines</th><th>Amount</th><th>Status</th><th>Updated</th></tr>
-        </thead>
-        <tbody id="ordersBody"></tbody>
-      </table>
-      <div class="empty" id="ordersEmpty" style="display:none;">No orders match.</div>
-      <div class="detail" id="orderDetail" style="display:none;"></div>
-    </div>
-  </section>
+    <nav id="tabs" role="tablist" aria-label="Dashboard sections">
+      <button data-tab="overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview" id="tabbtn-overview">Overview</button>
+      <button data-tab="orders" role="tab" aria-selected="false" aria-controls="tab-orders" id="tabbtn-orders">Orders</button>
+      <button data-tab="inventory" role="tab" aria-selected="false" aria-controls="tab-inventory" id="tabbtn-inventory">Inventory</button>
+      <button data-tab="feed" role="tab" aria-selected="false" aria-controls="tab-feed" id="tabbtn-feed">Live Feed</button>
+    </nav>
 
-  <!-- INVENTORY -->
-  <section class="tab" id="tab-inventory">
-    <div class="toolbar">
-      <input id="invSearch" type="text" placeholder="Search by warehouse or SKU…" />
-      <span class="count" id="invCount"></span>
-    </div>
-    <div class="panel">
-      <table>
-        <thead><tr><th>Warehouse</th><th>SKU</th><th>Available</th></tr></thead>
-        <tbody id="invBody"></tbody>
-      </table>
-      <div class="empty" id="invEmpty" style="display:none;">
-        No stock recorded yet — set some with <code>PUT /api/inventory</code> or <code>npm run seed</code>.
+    <!-- OVERVIEW -->
+    <section class="tab active" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview">
+      <div class="cards" id="kpiCards"></div>
+
+      <div class="panel">
+        <h2>System profile</h2>
+        <p>
+          A distributed inventory reservation and order-fulfillment system built around two
+          failure modes that break real supply-chain backends: overselling stock under
+          concurrency, and orders left half-finished when a downstream step fails.
+        </p>
+        <p>
+          <strong>Atomic reservation.</strong> Stock check-and-decrement runs as a single Redis
+          Lua script, so concurrent callers — including multiple app instances — can never
+          oversell. Verified: 500 concurrent reservation attempts against 50 units of stock
+          accept exactly 50, every time.
+        </p>
+        <p>
+          <strong>Saga orchestration.</strong> <code>reserve inventory → charge payment →
+          schedule shipping → confirm</code>, with an explicit, idempotent compensating
+          transaction for every step — a failure partway through cleanly unwinds everything
+          that already succeeded instead of leaking state.
+        </p>
+        <p>
+          <strong>Multi-warehouse convergence.</strong> Each warehouse consumes a shared event
+          log through its own consumer-group cursor; a node that drops offline (simulated
+          network partition) replays what it missed on reconnect and converges to the same
+          state as every other node.
+        </p>
+        <div class="chips">
+          <span class="chip">Node.js / TypeScript</span>
+          <span class="chip">Express</span>
+          <span class="chip">Redis (Lua scripts)</span>
+          <span class="chip">Kafka</span>
+          <span class="chip">Postgres (schema ready)</span>
+          <span class="chip">Zod</span>
+          <span class="chip">Vitest</span>
+          <span class="chip">Docker / Kubernetes</span>
+          <span class="chip">Server-Sent Events</span>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- LIVE FEED -->
-  <section class="tab" id="tab-feed">
-    <div class="panel">
-      <h2>Saga transitions, streamed live</h2>
-      <p style="margin-bottom:14px;">Every saga transition streams here over Server-Sent Events (/api/events/stream) the moment it happens. Create an order via <code>POST /api/orders</code> to see it.</p>
-      <div id="feed"><div class="empty" id="feedEmpty">Waiting for events…</div></div>
-    </div>
-  </section>
+    <!-- ORDERS -->
+    <section class="tab" id="tab-orders" role="tabpanel" aria-labelledby="tabbtn-orders">
+      <div class="toolbar">
+        <input id="orderSearch" type="text" placeholder="Search by order id or customer id…" aria-label="Search orders" />
+        <select id="statusFilter" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="CONFIRMED">CONFIRMED</option>
+          <option value="CANCELLED">CANCELLED</option>
+          <option value="FAILED">FAILED</option>
+          <option value="COMPENSATING">COMPENSATING</option>
+          <option value="CREATED">CREATED</option>
+          <option value="INVENTORY_RESERVED">INVENTORY_RESERVED</option>
+          <option value="PAYMENT_CHARGED">PAYMENT_CHARGED</option>
+          <option value="SHIPPING_SCHEDULED">SHIPPING_SCHEDULED</option>
+        </select>
+        <span class="count" id="orderCount"></span>
+      </div>
+      <div class="panel">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>Order</th><th>Customer</th><th>Lines</th><th>Amount</th><th>Status</th><th>Updated</th></tr>
+            </thead>
+            <tbody id="ordersBody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="ordersEmpty" style="display:none;">No orders match.</div>
+        <div class="detail" id="orderDetail" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- INVENTORY -->
+    <section class="tab" id="tab-inventory" role="tabpanel" aria-labelledby="tabbtn-inventory">
+      <div class="toolbar">
+        <input id="invSearch" type="text" placeholder="Search by warehouse or SKU…" aria-label="Search inventory" />
+        <span class="count" id="invCount"></span>
+      </div>
+      <div class="panel">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Warehouse</th><th>SKU</th><th>Available</th></tr></thead>
+            <tbody id="invBody"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="invEmpty" style="display:none;">
+          No stock recorded yet — set some with <code>PUT /api/inventory</code> or <code>npm run seed</code>.
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE FEED -->
+    <section class="tab" id="tab-feed" role="tabpanel" aria-labelledby="tabbtn-feed">
+      <div class="panel">
+        <h2>Saga transitions, streamed live</h2>
+        <p style="margin-bottom:14px;">Every saga transition streams here over Server-Sent Events (/api/events/stream) the moment it happens. Create an order via <code>POST /api/orders</code> to see it.</p>
+        <div id="feed"><div class="empty" id="feedEmpty">Waiting for events…</div></div>
+      </div>
+    </section>
+  </div>
 
   <script>
     // ---------- tabs ----------
     const tabs = document.querySelectorAll("#tabs button");
     tabs.forEach((btn) => {
       btn.addEventListener("click", () => {
-        tabs.forEach((b) => b.classList.remove("active"));
+        tabs.forEach((b) => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
         btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
         document.querySelectorAll("section.tab").forEach((s) => s.classList.remove("active"));
         document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
       });
@@ -314,20 +194,24 @@
       const body = document.getElementById("ordersBody");
       document.getElementById("ordersEmpty").style.display = list.length ? "none" : "block";
       body.innerHTML = list.map((o) => `
-        <tr data-id="${o.id}" class="${o.id === selectedOrderId ? "selected" : ""}">
-          <td class="mono">${o.id.slice(0, 8)}</td>
-          <td>${escapeHtml(o.customerId)}</td>
-          <td class="mono">${o.lines.length}</td>
-          <td class="amount">${fmtMoney(o.amountCents)}</td>
-          <td><span class="badge ${o.status}">${o.status}</span></td>
-          <td class="mono">${fmtTime(o.updatedAt)}</td>
+        <tr data-id="${o.id}" class="${o.id === selectedOrderId ? "selected" : ""}" tabindex="0">
+          <td class="mono" data-label="Order">${o.id.slice(0, 8)}</td>
+          <td data-label="Customer">${escapeHtml(o.customerId)}</td>
+          <td class="mono" data-label="Lines">${o.lines.length}</td>
+          <td class="amount" data-label="Amount">${fmtMoney(o.amountCents)}</td>
+          <td data-label="Status"><span class="badge ${o.status}">${o.status}</span></td>
+          <td class="mono" data-label="Updated">${fmtTime(o.updatedAt)}</td>
         </tr>`).join("");
 
       body.querySelectorAll("tr").forEach((tr) => {
-        tr.addEventListener("click", () => {
+        const select = () => {
           selectedOrderId = selectedOrderId === tr.dataset.id ? null : tr.dataset.id;
           renderOrders();
           renderOrderDetail();
+        };
+        tr.addEventListener("click", select);
+        tr.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(); }
         });
       });
     }
@@ -369,9 +253,9 @@
         const cls = r.available === 0 ? "empty" : r.available / max < 0.2 ? "low" : "";
         return `
         <tr>
-          <td>${escapeHtml(r.warehouseId)}</td>
-          <td class="mono">${escapeHtml(r.sku)}</td>
-          <td>
+          <td data-label="Warehouse">${escapeHtml(r.warehouseId)}</td>
+          <td class="mono" data-label="SKU">${escapeHtml(r.sku)}</td>
+          <td data-label="Available">
             <div class="inv-bar-wrap">
               <span class="mono">${r.available}</span>
               <div class="inv-bar"><span class="${cls}" style="width:${pct}%"></span></div>
