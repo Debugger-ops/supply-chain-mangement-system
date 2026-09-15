@@ -1,0 +1,93 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { randomUUID } from "node:crypto";
+import { PgOrderStore } from "../src/orders/pgOrderStore.js";
+import { closePgPool } from "../src/lib/pgClient.js";
+import { getTestPgPool } from "./setup.js";
+import type { Order } from "../src/types.js";
+
+describe("PgOrderStore", () => {
+  let store: PgOrderStore;
+
+  beforeAll(() => {
+    store = new PgOrderStore(getTestPgPool());
+  });
+
+  afterAll(async () => {
+    await closePgPool();
+  });
+
+  function buildOrder(overrides: Partial<Order> = {}): Order {
+    const now = Date.now();
+    return {
+      id: randomUUID(),
+      customerId: "cust-test",
+      lines: [{ sku: "sku-pg-1", qty: 2, warehouseId: "wh-1" }],
+      amountCents: 4999,
+      status: "CREATED",
+      history: [],
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    };
+  }
+
+  it("round-trips create -> get, including lines", async () => {
+    const order = buildOrder();
+    await store.create(order);
+
+    const fetched = await store.get(order.id);
+    expect(fetched).toBeDefined();
+    expect(fetched!.customerId).toBe("cust-test");
+    expect(fetched!.lines).toEqual(order.lines);
+    expect(fetched!.status).toBe("CREATED");
+  });
+
+  it("updateStatus appends to history and updates status", async () => {
+    const order = buildOrder();
+    await store.create(order);
+
+    await store.updateStatus(order.id, "INVENTORY_RESERVED", {
+      type: "order.inventory_reserved",
+      at: Date.now(),
+      detail: { reservations: [{ reservationId: "resv-1" }] },
+    });
+
+    const fetched = await store.get(order.id);
+    expect(fetched!.status).toBe("INVENTORY_RESERVED");
+    expect(fetched!.history).toHaveLength(1);
+    expect(fetched!.history[0].type).toBe("order.inventory_reserved");
+    expect(fetched!.history[0].detail).toEqual({ reservations: [{ reservationId: "resv-1" }] });
+  });
+
+  it("updateStatus throws on an unknown order and writes nothing", async () => {
+    const unknownId = randomUUID();
+    await expect(
+      store.updateStatus(unknownId, "CONFIRMED", { type: "order.confirmed", at: Date.now() })
+    ).rejects.toThrow();
+
+    expect(await store.get(unknownId)).toBeUndefined();
+  });
+
+  it("all() returns every order, correctly grouped, without an N+1 query pattern", async () => {
+    const a = buildOrder({ lines: [{ sku: "sku-pg-a", qty: 1, warehouseId: "wh-1" }] });
+    const b = buildOrder({ lines: [{ sku: "sku-pg-b", qty: 3, warehouseId: "wh-2" }] });
+    await store.create(a);
+    await store.create(b);
+
+    const all = await store.all();
+    expect(all.map((o) => o.id)).toEqual(expect.arrayContaining([a.id, b.id]));
+    expect(all.find((o) => o.id === a.id)!.lines).toEqual(a.lines);
+  });
+
+  it("rolls back create() entirely when a line insert fails", async () => {
+    const order = buildOrder({
+      lines: [
+        { sku: "sku-dup", qty: 1, warehouseId: "wh-1" },
+        { sku: "sku-dup", qty: 2, warehouseId: "wh-1" }, // duplicate (order_id, sku, warehouse_id) -> PK violation
+      ],
+    });
+
+    await expect(store.create(order)).rejects.toThrow();
+    expect(await store.get(order.id)).toBeUndefined(); // no orphaned order row
+  });
+});
