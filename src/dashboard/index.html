@@ -106,6 +106,10 @@
               <label for="ofCustomer">Customer ID</label>
               <input id="ofCustomer" type="text" placeholder="cust_123" required />
             </div>
+            <div class="form-col">
+              <label for="ofAmount">Order amount (USD)</label>
+              <input id="ofAmount" type="number" min="0.01" step="0.01" placeholder="49.99" required />
+            </div>
           </div>
           <div id="orderFormLines"></div>
           <div class="form-actions">
@@ -524,14 +528,16 @@
       const msgEl = document.getElementById("orderFormMsg");
       msgEl.innerHTML = "";
       const customerId = document.getElementById("ofCustomer").value.trim();
+      const amountUsd = Number(document.getElementById("ofAmount").value);
+      const amountCents = Math.round(amountUsd * 100);
       const lineRows = [...document.querySelectorAll("#orderFormLines .line-item")];
       const lines = lineRows.map((row) => ({
         sku: row.querySelector(".lf-sku").value.trim(),
         qty: Number(row.querySelector(".lf-qty").value),
         warehouseId: row.querySelector(".lf-wh").value.trim(),
       }));
-      if (!customerId || lines.some((l) => !l.sku || !l.warehouseId || !l.qty || l.qty < 1)) {
-        msgEl.innerHTML = '<div class="form-msg error">Fill in customer ID and every line (SKU, quantity, warehouse).</div>';
+      if (!customerId || !amountUsd || amountCents < 1 || lines.some((l) => !l.sku || !l.warehouseId || !l.qty || l.qty < 1)) {
+        msgEl.innerHTML = '<div class="form-msg error">Fill in customer ID, a positive order amount, and every line (SKU, quantity, warehouse).</div>';
         return;
       }
       const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -540,7 +546,7 @@
         const res = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customerId, lines }),
+          body: JSON.stringify({ customerId, amountCents, lines }),
         });
         if (!res.ok) {
           const raw = await res.text();
@@ -550,6 +556,7 @@
         }
         msgEl.innerHTML = '<div class="form-msg success">Order created.</div>';
         document.getElementById("ofCustomer").value = "";
+        document.getElementById("ofAmount").value = "";
         document.getElementById("orderFormLines").innerHTML = "";
         document.getElementById("orderFormLines").appendChild(createLineRow());
         refreshAll();

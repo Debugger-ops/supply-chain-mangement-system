@@ -29,10 +29,18 @@ export interface RedisLike {
  */
 import { connect, Socket } from "node:net";
 
+/** A RESP2 error reply (Redis `-ERR ...`, or a Lua script's `redis.error_reply`). */
+export class RedisReplyError extends Error {}
+
+interface PendingCall {
+  resolve: (v: unknown) => void;
+  reject: (err: Error) => void;
+}
+
 export class RawRespClient implements RedisLike {
   private socket: Socket;
   private buffer = Buffer.alloc(0);
-  private pending: Array<(v: unknown) => void> = [];
+  private pending: PendingCall[] = [];
   private ready: Promise<void>;
 
   constructor(private host = "127.0.0.1", private port = 6379) {
@@ -41,7 +49,18 @@ export class RawRespClient implements RedisLike {
       this.socket.once("connect", () => resolve());
       this.socket.once("error", reject);
     });
+    // A socket-level error or close after connect (server restart, network
+    // blip) must reject whoever's still waiting on a reply instead of
+    // becoming an unhandled 'error' event, which would otherwise crash the
+    // whole process out from under every other in-flight request.
+    this.socket.on("error", (err) => this.failAllPending(err));
+    this.socket.on("close", () => this.failAllPending(new Error("Redis connection closed")));
     this.socket.on("data", (chunk) => this.onData(chunk));
+  }
+
+  private failAllPending(err: Error): void {
+    const waiting = this.pending.splice(0, this.pending.length);
+    for (const { reject } of waiting) reject(err);
   }
 
   private onData(chunk: Buffer) {
@@ -49,11 +68,27 @@ export class RawRespClient implements RedisLike {
     let progressed = true;
     while (progressed) {
       progressed = false;
-      const result = tryParseReply(this.buffer);
+      // A RESP error reply (e.g. a Lua script's redis.error_reply) or a
+      // malformed reply must reject the specific caller waiting on it, not
+      // throw synchronously out of this 'data' listener — an uncaught
+      // exception here would crash the entire process, not just fail one
+      // request.
+      let result: { value: unknown; consumed: number } | null;
+      try {
+        result = tryParseReply(this.buffer);
+      } catch (err) {
+        this.buffer = Buffer.alloc(0); // parser state is unrecoverable — drop it rather than loop forever
+        const pending = this.pending.shift();
+        if (pending) pending.reject(err as Error);
+        return;
+      }
       if (result) {
         this.buffer = this.buffer.subarray(result.consumed);
-        const resolve = this.pending.shift();
-        if (resolve) resolve(result.value);
+        const pending = this.pending.shift();
+        if (pending) {
+          if (result.value instanceof RedisReplyError) pending.reject(result.value);
+          else pending.resolve(result.value);
+        }
         progressed = true;
       }
     }
@@ -62,8 +97,8 @@ export class RawRespClient implements RedisLike {
   private async send(...args: (string | number)[]): Promise<unknown> {
     await this.ready;
     const encoded = encodeCommand(args.map(String));
-    return new Promise((resolve) => {
-      this.pending.push(resolve);
+    return new Promise((resolve, reject) => {
+      this.pending.push({ resolve, reject });
       this.socket.write(encoded);
     });
   }
@@ -95,7 +130,9 @@ function encodeCommand(args: string[]): string {
 // Parses exactly one RESP2 reply from the front of `buf`, if a complete one
 // is present. Returns null if more bytes are needed. Handles simple strings,
 // errors, integers, bulk strings, and (one level of) arrays — sufficient for
-// GET/SET/DEL/EVAL replies.
+// GET/SET/DEL/EVAL replies. An error reply ("-") is returned as a
+// RedisReplyError value (not thrown) so the caller can decide, per-reply,
+// whether to reject the specific waiting promise — see onData() above.
 function tryParseReply(buf: Buffer, offset = 0): { value: unknown; consumed: number } | null {
   if (offset >= buf.length) return null;
   const type = String.fromCharCode(buf[offset]);
@@ -107,7 +144,7 @@ function tryParseReply(buf: Buffer, offset = 0): { value: unknown; consumed: num
     case "+": // simple string
       return { value: line, consumed: lineEnd + 2 - offset };
     case "-": // error
-      throw new Error(line);
+      return { value: new RedisReplyError(line), consumed: lineEnd + 2 - offset };
     case ":": // integer
       return { value: Number(line), consumed: lineEnd + 2 - offset };
     case "$": { // bulk string
@@ -143,7 +180,18 @@ function tryParseReply(buf: Buffer, offset = 0): { value: unknown; consumed: num
  * Requires `npm install` to have pulled in ioredis.
  */
 export async function createIoRedisClient(url: string): Promise<RedisLike> {
-  const { default: IORedis } = await import("ioredis");
+  // ioredis ships as a CJS package with an ESM-shaped .d.ts (`export {
+  // default } from "./Redis"`) and no "exports" map in its package.json.
+  // Under this project's `module`/`moduleResolution: "NodeNext"`, TypeScript
+  // resolves a dynamic `import("ioredis")` against that mismatch and infers
+  // the module namespace's `default` as non-constructable ("has no
+  // construct signatures"), even though at runtime it's a plain class. The
+  // cast below is the interop boundary: it tells TypeScript what `import()`
+  // actually hands back here (an ioredis constructor), same as
+  // `esModuleInterop` would for a static `import IORedis from "ioredis"` —
+  // this just needs a manual assist for the dynamic form.
+  type IORedisModule = { default: new (url: string) => import("ioredis").default };
+  const { default: IORedis } = (await import("ioredis")) as unknown as IORedisModule;
   const client = new IORedis(url);
   return {
     eval: (script, numKeys, ...rest) => client.eval(script, numKeys, ...(rest as string[])) as Promise<unknown>,

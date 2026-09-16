@@ -8,7 +8,7 @@ export interface ReservationResult {
   ok: boolean;
   reservationId?: string;
   remaining?: number;
-  reason?: "INSUFFICIENT_STOCK" | "INVALID_QTY";
+  reason?: "INSUFFICIENT_STOCK" | "INVALID_QTY" | "UNKNOWN_SKU";
 }
 
 export interface StockRecord {

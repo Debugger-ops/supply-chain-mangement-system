@@ -10,4 +10,5 @@ data:
   REDIS_DRIVER: "ioredis"
   REDIS_URL: "redis://redis:6379"
   KAFKA_BROKERS: "kafka:9092"
+  ORDER_STORE: "pg"
   PORT: "3000"

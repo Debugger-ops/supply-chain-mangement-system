@@ -24,7 +24,16 @@ end
 
 local available = tonumber(redis.call("GET", stockKey))
 if available == nil then
-  return redis.error_reply("UNKNOWN_SKU")
+  -- Unlike INVALID_QTY (a client-code bug, pre-validated in TS before this
+  -- script even runs), an unknown SKU is a normal, expected outcome — a
+  -- caller referencing a SKU nobody has PUT stock for yet. Returning it as
+  -- an error reply (like INVALID_QTY does) would surface as a Redis
+  -- protocol error instead of a rejection result, which the raw RESP
+  -- client has no way to route back to the specific caller as anything
+  -- but a thrown exception. Report it the same shape as INSUFFICIENT_STOCK
+  -- instead, so InventoryService.reserve() can turn it into an ordinary
+  -- { ok: false, reason: "UNKNOWN_SKU" } result.
+  return { "UNKNOWN_SKU", 0 }
 end
 
 if available < qty then

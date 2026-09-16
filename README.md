@@ -68,6 +68,8 @@ npm run dev
 ```bash
 npm install
 npm test                       # Vitest — needs a local Redis reachable at REDIS_HOST:REDIS_PORT (default 127.0.0.1:6379)
+                                # tests/pgOrderStore.test.ts also needs Postgres reachable at DATABASE_URL,
+                                # with the schema applied — `docker compose up postgres` provisions both.
 npm run verify                 # zero-dependency verification script (tsx + raw RESP client), no npm install required beyond tsx
 ```
 
@@ -139,9 +141,14 @@ k8s/
 Being upfront about what this doesn't cover yet, since an interviewer will
 probe exactly these:
 
-- `PgOrderStore` (a Postgres-backed `OrderStore`) isn't implemented yet —
-  `InMemoryOrderStore` is used everywhere, including by the API server. The
-  schema is ready in `docs/schema.sql`; wiring it up is a natural extension.
+- `PgOrderStore` (a Postgres-backed `OrderStore`, `docs/schema.sql`) is
+  implemented and wired in behind `ORDER_STORE=pg` (see `.env.example`,
+  `docker-compose.yml`'s `app` service, `k8s/base/app-configmap.yaml`) —
+  `InMemoryOrderStore` remains the default and is what the test suite uses
+  unless a test explicitly opts into Postgres (`tests/pgOrderStore.test.ts`).
+  Not yet done: the recovery sweep for an order stuck mid-saga after a
+  restart (see "Chaos/fault-injection" below) and re-running
+  `tests/concurrency.load.test.ts` against `PgOrderStore` specifically.
 - No authentication/authorization on the API.
 - The saga is synchronous end-to-end within one HTTP request; a production
   version would likely make `POST /api/orders` return immediately after

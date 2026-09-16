@@ -47,5 +47,6 @@ services:
       REDIS_DRIVER: ioredis
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      ORDER_STORE: pg
       DATABASE_URL: postgres://app:app@postgres:5432/supply_chain
       PORT: "3000"

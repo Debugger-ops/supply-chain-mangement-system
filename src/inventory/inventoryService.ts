@@ -104,9 +104,9 @@ export class InventoryService {
     metrics.reservationLatency.observe(performance.now() - start);
 
     const [status, value] = result;
-    if (status === "INSUFFICIENT_STOCK") {
+    if (status === "INSUFFICIENT_STOCK" || status === "UNKNOWN_SKU") {
       metrics.reservationsRejected.inc({ sku, warehouseId });
-      return { ok: false, reason: "INSUFFICIENT_STOCK", remaining: value };
+      return { ok: false, reason: status, remaining: value };
     }
     metrics.reservationsAccepted.inc({ sku, warehouseId });
     return { ok: true, reservationId, remaining: value };

@@ -6,7 +6,9 @@ import { InMemoryEventBus, createKafkaEventBus, type EventBus } from "../lib/eve
 import { InventoryService } from "../inventory/inventoryService.js";
 import { PaymentGateway } from "../payments/paymentGateway.js";
 import { ShippingProvider } from "../shipping/shippingProvider.js";
-import { InMemoryOrderStore } from "../orders/orderStore.js";
+import { InMemoryOrderStore, type OrderStore } from "../orders/orderStore.js";
+import { PgOrderStore } from "../orders/pgOrderStore.js";
+import { getPgPool } from "../lib/pgClient.js";
 import { SagaOrchestrator } from "../orders/sagaOrchestrator.js";
 import { ordersRouter } from "./routes/orders.js";
 import { inventoryRouter } from "./routes/inventory.js";
@@ -35,6 +37,19 @@ async function buildEventBus(): Promise<EventBus> {
   return new InMemoryEventBus();
 }
 
+// ORDER_STORE=pg (recommended once DATABASE_URL points at a real Postgres —
+// see .env.example / docker-compose.yml) persists orders in Postgres via
+// PgOrderStore (docs/schema.sql), so order history survives a restart.
+// Defaults to InMemoryOrderStore — same "raw unless opted in" pattern as
+// REDIS_DRIVER above — which is also what the test suite uses unless a test
+// explicitly opts into PgOrderStore.
+function buildOrderStore(): OrderStore {
+  if (process.env.ORDER_STORE === "pg") {
+    return new PgOrderStore(getPgPool());
+  }
+  return new InMemoryOrderStore();
+}
+
 async function main() {
   const redis = await buildRedisClient();
   const eventBus = await buildEventBus();
@@ -42,7 +57,7 @@ async function main() {
   const inventory = new InventoryService(redis);
   const payments = new PaymentGateway();
   const shipping = new ShippingProvider();
-  const store = new InMemoryOrderStore(); // swap for PgOrderStore (docs/schema.sql) in production
+  const store = buildOrderStore();
   const saga = new SagaOrchestrator(inventory, payments, shipping, eventBus, store);
   const sseHub = new SseHub(eventBus);
 
@@ -80,6 +95,18 @@ async function main() {
   });
 
   app.use("/dashboard", express.static(path.join(__dirname, "../dashboard")));
+
+  // Last-resort error handler. Express only forwards synchronous throws to
+  // this automatically; every async route above is wrapped in asyncHandler
+  // (src/api/asyncHandler.ts) specifically so a rejected promise ends up
+  // here too, as a clean JSON 500, instead of an unhandled rejection that
+  // would otherwise crash the whole process on a single bad request. Must
+  // be registered after every other app.use()/route.
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("Unhandled request error:", err);
+    if (res.headersSent) return;
+    res.status(500).json({ error: "INTERNAL_ERROR", message: err instanceof Error ? err.message : "Unknown error" });
+  });
 
   const port = Number(process.env.PORT ?? 3000);
   app.listen(port, () => {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { asyncHandler } from "../asyncHandler.js";
 import type { InventoryService } from "../../inventory/inventoryService.js";
 
 const setStockSchema = z.object({
@@ -11,7 +12,7 @@ const setStockSchema = z.object({
 export function inventoryRouter(inventory: InventoryService): Router {
   const router = Router();
 
-  router.put("/inventory", async (req, res) => {
+  router.put("/inventory", asyncHandler(async (req, res) => {
     const parsed = setStockSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: "INVALID_PAYLOAD", details: parsed.error.flatten() });
@@ -19,19 +20,19 @@ export function inventoryRouter(inventory: InventoryService): Router {
     const { warehouseId, sku, qty } = parsed.data;
     await inventory.setStock(warehouseId, sku, qty);
     res.status(204).end();
-  });
+  }));
 
   // Every (warehouseId, sku) this process has touched, with current available
   // stock — powers the dashboard's inventory table.
-  router.get("/inventory", async (_req, res) => {
+  router.get("/inventory", asyncHandler(async (_req, res) => {
     res.json(await inventory.listAll());
-  });
+  }));
 
-  router.get("/inventory/:warehouseId/:sku", async (req, res) => {
+  router.get("/inventory/:warehouseId/:sku", asyncHandler(async (req, res) => {
     const { warehouseId, sku } = req.params;
     const available = await inventory.getAvailable(warehouseId, sku);
     res.json({ warehouseId, sku, available });
-  });
+  }));
 
   return router;
 }
