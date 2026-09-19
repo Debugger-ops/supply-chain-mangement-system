@@ -29,3 +29,23 @@ CREATE TABLE IF NOT EXISTS order_events (
 
 CREATE INDEX IF NOT EXISTS idx_order_events_order_id ON order_events (order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+
+-- Registered businesses (src/business/businessStore.ts's BusinessStore
+-- interface, PgBusinessStore implementation) — one row per registered
+-- business, backing POST /api/auth/register, /api/auth/login, and the
+-- dashboard's workspace switcher's "your business" entry. Not required for
+-- local dev — InMemoryBusinessStore is used by default and by the test
+-- suite. Email is lowercased in the API layer (Zod schema) before every
+-- read/write, so a plain UNIQUE constraint is sufficient here.
+
+CREATE TABLE IF NOT EXISTS businesses (
+  id UUID PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  business_name TEXT NOT NULL,
+  business_type TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  accent_color TEXT NOT NULL DEFAULT '#9fd3ff',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

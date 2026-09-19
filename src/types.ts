@@ -57,3 +57,32 @@ export interface FailureInjection {
   failPaymentForOrderIds?: Set<string>;
   failShippingForOrderIds?: Set<string>;
 }
+
+// ---------------------------------------------------------------------------
+// Business accounts — registration, login, and workspace branding. See
+// src/business/businessStore.ts (persistence) and src/api/routes/business.ts
+// (HTTP surface: /api/auth/register, /api/auth/login, /api/auth/me,
+// /api/business/profile).
+// ---------------------------------------------------------------------------
+
+export type BusinessType = "b2c" | "b2b2b" | "b2b" | "other";
+
+export interface Business {
+  id: string;
+  email: string;
+  /** Never sent to the client — see PublicBusiness / toPublic() in routes/business.ts. */
+  passwordHash: string;
+  businessName: string;
+  businessType: BusinessType;
+  description: string;
+  accentColor: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** What actually goes over the wire — Business minus passwordHash. */
+export type PublicBusiness = Omit<Business, "passwordHash">;
+
+export type BusinessProfilePatch = Partial<
+  Pick<Business, "businessName" | "businessType" | "description" | "accentColor">
+>;

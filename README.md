@@ -87,6 +87,11 @@ and `docs/verify-output.txt` — run it yourself and quote your own output.
 | GET    | `/api/orders`                         | List all orders                       |
 | GET    | `/api/events/stream`                  | Server-Sent Events feed of saga transitions |
 | GET    | `/metrics`                            | Plain-text metrics snapshot           |
+| POST   | `/api/auth/register`                  | Register a business account (name, type, description, accent color) and start a session |
+| POST   | `/api/auth/login`                     | Log in and start a session            |
+| POST   | `/api/auth/logout`                    | End the session                       |
+| GET    | `/api/auth/me`                        | The logged-in business's profile, or 401 |
+| PATCH  | `/api/business/profile`               | Update the logged-in business's profile |
 
 Example:
 
@@ -96,6 +101,17 @@ curl -X PUT localhost:3000/api/inventory -H "content-type: application/json" \
 
 curl -X POST localhost:3000/api/orders -H "content-type: application/json" \
   -d '{"customerId":"cust-1","amountCents":499900,"lines":[{"sku":"SKU-LAPTOP-14","qty":1,"warehouseId":"wh-blr-1"}]}'
+```
+
+Business accounts (dashboard registration/login — see `src/business/`,
+`src/auth/`, `src/api/routes/business.ts`) are separate from the above and
+don't scope orders/inventory to a business; see "Known gaps" below.
+
+```bash
+curl -i -c cookies.txt -X POST localhost:3000/api/auth/register -H "content-type: application/json" \
+  -d '{"email":"you@company.com","password":"at least 8 characters","businessName":"Acme Retail","businessType":"b2c"}'
+
+curl -b cookies.txt localhost:3000/api/auth/me
 ```
 
 ## Kubernetes
@@ -149,7 +165,16 @@ probe exactly these:
   Not yet done: the recovery sweep for an order stuck mid-saga after a
   restart (see "Chaos/fault-injection" below) and re-running
   `tests/concurrency.load.test.ts` against `PgOrderStore` specifically.
-- No authentication/authorization on the API.
+- Authentication (`src/auth/`, `src/business/`) covers business accounts
+  only — register/login/profile at `/api/auth/*` and `/api/business/profile`,
+  sessions as HMAC-signed HttpOnly cookies (scrypt-hashed passwords, both via
+  Node's built-in `node:crypto`, no new dependency). It does **not** scope
+  `/api/orders` or `/api/inventory` to the logged-in business — those stay
+  open, matching this demo's single-tenant data model. Multi-tenant scoping
+  (a `businessId` on orders/inventory, enforced per request) is the natural
+  next step, not yet done. `PgBusinessStore` exists behind the same
+  `ORDER_STORE=pg` flag as `PgOrderStore` but isn't covered by
+  `tests/pgOrderStore.test.ts`-style Postgres integration tests yet.
 - The saga is synchronous end-to-end within one HTTP request; a production
   version would likely make `POST /api/orders` return immediately after
   `order.created` and drive the rest of the saga asynchronously off the

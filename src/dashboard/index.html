@@ -34,6 +34,11 @@
       <div class="header-right">
         <div class="status-cluster">
           <span class="last-updated" id="lastUpdated"></span>
+          <div class="currency-picker">
+            <label class="visually-hidden" for="currencySelect">Display currency</label>
+            <select id="currencySelect" aria-label="Display currency"></select>
+            <button type="button" class="info-dot" id="currencyInfo" title="Approximate rates, for display only — every order is still created and stored in USD." aria-label="About the currency switcher">i</button>
+          </div>
           <button type="button" class="btn icon-btn" id="refreshBtn" title="Refresh now" aria-label="Refresh now">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>
           </button>
@@ -110,7 +115,9 @@
             switcher</strong> in the top-left corner to see the same live data framed for a
             direct-to-consumer storefront (B2C) or a fulfillment network running orders on
             behalf of other brands (B2B2B). Nothing about the data changes, only how it's
-            presented — which is the point: one engine, any go-to-market.
+            presented — which is the point: one engine, any go-to-market. Or go further and
+            <strong>register your own business</strong> from that same menu — real sign-up and
+            login, your name and colors applied to the whole dashboard.
           </span>
         </div>
       </div>
@@ -148,7 +155,7 @@
               <input id="ofCustomer" type="text" placeholder="cust_123" required />
             </div>
             <div class="form-col">
-              <label for="ofAmount">Order amount (USD)</label>
+              <label for="ofAmount">Order amount (USD — the platform's stored currency)</label>
               <input id="ofAmount" type="number" min="0.01" step="0.01" placeholder="49.99" required />
             </div>
           </div>
@@ -239,6 +246,119 @@
     </div>
   </div>
 
+  <!-- REGISTER / LOG IN MODAL -->
+  <div class="modal-overlay" id="authOverlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="modal-head">
+        <h2 id="authTitle">Register your business</h2>
+        <button type="button" class="btn icon-btn" id="authClose" aria-label="Close">✕</button>
+      </div>
+      <div class="auth-tabs" role="tablist" aria-label="Sign up or log in">
+        <button type="button" class="auth-tab active" data-authtab="register" role="tab" aria-selected="true">Sign up</button>
+        <button type="button" class="auth-tab" data-authtab="login" role="tab" aria-selected="false">Log in</button>
+      </div>
+
+      <form id="registerForm" class="auth-form">
+        <div class="form-row">
+          <div class="form-col">
+            <label for="regBusinessName">Business name</label>
+            <input id="regBusinessName" type="text" placeholder="Acme Retail" required maxlength="120" />
+          </div>
+          <div class="form-col">
+            <label for="regBusinessType">Business type</label>
+            <select id="regBusinessType" required>
+              <option value="b2c">B2C — sell direct to consumers</option>
+              <option value="b2b2b">B2B2B — fulfillment/platform for other brands</option>
+              <option value="b2b">B2B — sell to other businesses</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-col full">
+          <label for="regDescription">Describe your business <span class="optional">(optional)</span></label>
+          <textarea id="regDescription" rows="2" maxlength="600" placeholder="What do you sell, and to whom?"></textarea>
+        </div>
+        <div class="form-col full">
+          <label>Accent color</label>
+          <div class="swatch-picker" id="regSwatchPicker"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-col">
+            <label for="regEmail">Email</label>
+            <input id="regEmail" type="email" placeholder="you@company.com" required />
+          </div>
+          <div class="form-col">
+            <label for="regPassword">Password</label>
+            <input id="regPassword" type="password" placeholder="At least 8 characters" minlength="8" required />
+          </div>
+        </div>
+        <div class="form-actions">
+          <span class="spacer"></span>
+          <button type="submit" class="btn btn-primary">Create account</button>
+        </div>
+        <div id="registerMsg"></div>
+      </form>
+
+      <form id="loginForm" class="auth-form" style="display:none;">
+        <div class="form-col full">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" placeholder="you@company.com" required />
+        </div>
+        <div class="form-col full">
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" type="password" required />
+        </div>
+        <div class="form-actions">
+          <span class="spacer"></span>
+          <button type="submit" class="btn btn-primary">Log in</button>
+        </div>
+        <div id="loginMsg"></div>
+      </form>
+
+      <p class="modal-sub" style="margin-top:14px; margin-bottom:0;">This is a portfolio/demo project, not a real business platform — please don't reuse a password from anywhere else.</p>
+    </div>
+  </div>
+
+  <!-- PROFILE SETTINGS MODAL -->
+  <div class="modal-overlay" id="profileOverlay" hidden>
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <div class="modal-head">
+        <h2 id="profileTitle">Business profile</h2>
+        <button type="button" class="btn icon-btn" id="profileClose" aria-label="Close">✕</button>
+      </div>
+      <p class="modal-sub" id="profileEmailLine"></p>
+      <form id="profileForm" class="auth-form">
+        <div class="form-col full">
+          <label for="profBusinessName">Business name</label>
+          <input id="profBusinessName" type="text" required maxlength="120" />
+        </div>
+        <div class="form-col full">
+          <label for="profBusinessType">Business type</label>
+          <select id="profBusinessType" required>
+            <option value="b2c">B2C — sell direct to consumers</option>
+            <option value="b2b2b">B2B2B — fulfillment/platform for other brands</option>
+            <option value="b2b">B2B — sell to other businesses</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-col full">
+          <label for="profDescription">Description</label>
+          <textarea id="profDescription" rows="2" maxlength="600"></textarea>
+        </div>
+        <div class="form-col full">
+          <label>Accent color</label>
+          <div class="swatch-picker" id="profSwatchPicker"></div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-danger" id="logoutBtn">Log out</button>
+          <span class="spacer"></span>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+        <div id="profileMsg"></div>
+      </form>
+    </div>
+  </div>
+
   <script>
     // ============================================================
     // Tabs
@@ -310,25 +430,95 @@
     const wsMenu = document.getElementById("workspaceMenu");
     const wsLabel = document.getElementById("workspaceLabel");
 
-    wsMenu.innerHTML = WORKSPACE_ORDER.map((key) => {
-      const w = WORKSPACES[key];
-      const swatch = w.accent || "var(--accent)";
-      return `<li role="option" data-ws="${key}" tabindex="0">
-        <span class="ws-swatch" style="background:${swatch}"></span>
-        <span><span class="ws-name">${w.label}</span><span class="ws-desc">${w.desc}</span></span>
-      </li>`;
-    }).join("");
+    // currentBusiness holds the logged-in business's public profile (no
+    // password — see PublicBusiness in src/types.ts), or null when signed
+    // out. Declared here (rather than down in the "State" section below)
+    // because renderWorkspaceMenu(), which reads it, is called immediately
+    // during this section's own setup.
+    let currentBusiness = null;
+
+    function hexToRgb(hex) {
+      const m = /^#([0-9a-f]{6})$/i.exec(hex || "");
+      if (!m) return null;
+      const int = parseInt(m[1], 16);
+      return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+    }
+
+    // A registered business's accent color is arbitrary (chosen from the
+    // swatch picker), unlike the three presets' fixed hues above — so it's
+    // applied as an inline custom-property override rather than a CSS rule
+    // keyed on data-workspace. clearCustomAccent() removes that override so
+    // switching back to a preset isn't stuck on a business's old color
+    // (inline styles beat stylesheet rules regardless of selector).
+    function applyAccentColor(hex) {
+      const rgb = hexToRgb(hex);
+      if (!rgb) return;
+      root.style.setProperty("--accent", hex);
+      root.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+      root.style.setProperty("--accent-dim", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.13)`);
+    }
+    function clearCustomAccent() {
+      root.style.removeProperty("--accent");
+      root.style.removeProperty("--accent-rgb");
+      root.style.removeProperty("--accent-dim");
+    }
+
+    function renderWorkspaceMenu() {
+      const items = [];
+      if (currentBusiness) {
+        items.push(`<li role="option" data-ws="mybusiness" tabindex="0">
+          <span class="ws-swatch" style="background:${currentBusiness.accentColor}"></span>
+          <span><span class="ws-name">${escapeHtml(currentBusiness.businessName)}</span>
+          <span class="ws-desc">Your registered business</span>
+          <span class="ws-badge">Your account</span></span>
+        </li>`);
+      }
+      for (const key of WORKSPACE_ORDER) {
+        const w = WORKSPACES[key];
+        const swatch = w.accent || "var(--accent)";
+        items.push(`<li role="option" data-ws="${key}" tabindex="0">
+          <span class="ws-swatch" style="background:${swatch}"></span>
+          <span><span class="ws-name">${w.label}</span><span class="ws-desc">${w.desc}</span></span>
+        </li>`);
+      }
+      items.push(`<li class="ws-divider" role="separator" aria-hidden="true"></li>`);
+      if (currentBusiness) {
+        items.push(`<li class="ws-action" data-action="profile" tabindex="0">⚙ Profile settings</li>`);
+        items.push(`<li class="ws-action ws-danger" data-action="logout" tabindex="0">Log out</li>`);
+      } else {
+        items.push(`<li class="ws-action" data-action="register" tabindex="0">+ Register your business</li>`);
+        items.push(`<li class="ws-action" data-action="login" tabindex="0">Log in</li>`);
+      }
+      wsMenu.innerHTML = items.join("");
+      const activeKey = root.dataset.workspace === "custom" ? "mybusiness" : (root.dataset.workspace || "engineering");
+      wsMenu.querySelectorAll("li[data-ws]").forEach((li) => li.setAttribute("aria-selected", String(li.dataset.ws === activeKey)));
+    }
+    renderWorkspaceMenu();
 
     function applyWorkspace(key, opts) {
+      clearCustomAccent();
       const w = WORKSPACES[key] || WORKSPACES.engineering;
       document.getElementById("brandName").textContent = w.brand;
       document.getElementById("tagline").innerHTML = w.tagline;
       document.title = w.brand + " — Dashboard";
       wsLabel.textContent = w.label;
       root.dataset.workspace = key === "engineering" ? "" : key;
-      wsMenu.querySelectorAll("li").forEach((li) => li.setAttribute("aria-selected", String(li.dataset.ws === key)));
+      wsMenu.querySelectorAll("li[data-ws]").forEach((li) => li.setAttribute("aria-selected", String(li.dataset.ws === key)));
       if (!opts || !opts.silent) {
         try { localStorage.setItem("scs.workspace", key); } catch {}
+      }
+    }
+
+    function applyBusinessWorkspace(business, opts) {
+      document.getElementById("brandName").textContent = business.businessName;
+      document.getElementById("tagline").textContent = business.description || "Your registered business, powered by Supply Chain Saga.";
+      document.title = business.businessName + " — Dashboard";
+      wsLabel.textContent = business.businessName;
+      root.dataset.workspace = "custom";
+      applyAccentColor(business.accentColor);
+      wsMenu.querySelectorAll("li[data-ws]").forEach((li) => li.setAttribute("aria-selected", String(li.dataset.ws === "mybusiness")));
+      if (!opts || !opts.silent) {
+        try { localStorage.setItem("scs.workspace", "mybusiness"); } catch {}
       }
     }
 
@@ -340,14 +530,27 @@
 
     wsBtn.addEventListener("click", () => toggleWorkspaceMenu());
     wsMenu.addEventListener("click", (e) => {
-      const li = e.target.closest("li[data-ws]");
-      if (!li) return;
-      applyWorkspace(li.dataset.ws);
+      const wsLi = e.target.closest("li[data-ws]");
+      if (wsLi) {
+        if (wsLi.dataset.ws === "mybusiness" && currentBusiness) {
+          applyBusinessWorkspace(currentBusiness);
+        } else {
+          applyWorkspace(wsLi.dataset.ws);
+        }
+        toggleWorkspaceMenu(false);
+        wsBtn.focus();
+        return;
+      }
+      const actionLi = e.target.closest("li[data-action]");
+      if (!actionLi) return;
       toggleWorkspaceMenu(false);
-      wsBtn.focus();
+      if (actionLi.dataset.action === "register") openAuthModal("register");
+      else if (actionLi.dataset.action === "login") openAuthModal("login");
+      else if (actionLi.dataset.action === "profile") openProfileModal();
+      else if (actionLi.dataset.action === "logout") handleLogout();
     });
     wsMenu.addEventListener("keydown", (e) => {
-      const li = e.target.closest("li[data-ws]");
+      const li = e.target.closest("li[data-ws], li[data-action]");
       if (!li) return;
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); li.click(); }
     });
@@ -361,6 +564,283 @@
     let savedWorkspace = "engineering";
     try { savedWorkspace = localStorage.getItem("scs.workspace") || "engineering"; } catch {}
     applyWorkspace(WORKSPACES[savedWorkspace] ? savedWorkspace : "engineering", { silent: true });
+
+    // ============================================================
+    // Business accounts — register / log in / profile / logout.
+    // Session lives in an HttpOnly cookie (src/auth/session.ts +
+    // src/auth/cookies.ts) signed server-side — the dashboard never handles
+    // the token itself, only whether /api/auth/me succeeds. Every request
+    // below passes credentials: "include" so that cookie is sent and stored.
+    // ============================================================
+    const BUSINESS_TYPE_LABELS = {
+      b2c: "B2C — direct to consumers",
+      b2b2b: "B2B2B — fulfillment/platform for other brands",
+      b2b: "B2B — sells to other businesses",
+      other: "Other",
+    };
+    const ACCENT_SWATCHES = ["#9fd3ff", "#ff7a59", "#2bb3a3", "#c084fc", "#f6993f", "#38c172", "#e3342f", "#4a90d9"];
+
+    function renderSwatchPicker(container, selected, onPick) {
+      container.innerHTML = ACCENT_SWATCHES.map((hex) =>
+        `<button type="button" class="swatch" data-hex="${hex}" style="background:${hex}" aria-checked="${hex === selected}" aria-label="${hex}"></button>`
+      ).join("");
+      container.querySelectorAll(".swatch").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          container.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-checked", "false"));
+          btn.setAttribute("aria-checked", "true");
+          onPick(btn.dataset.hex);
+        });
+      });
+    }
+
+    let regAccent = ACCENT_SWATCHES[0];
+    renderSwatchPicker(document.getElementById("regSwatchPicker"), regAccent, (hex) => { regAccent = hex; });
+    let profAccent = ACCENT_SWATCHES[0];
+
+    const authOverlay = document.getElementById("authOverlay");
+    const authTabs = document.querySelectorAll(".auth-tab");
+    const registerForm = document.getElementById("registerForm");
+    const loginForm = document.getElementById("loginForm");
+
+    function setAuthTab(mode) {
+      authTabs.forEach((t) => {
+        const active = t.dataset.authtab === mode;
+        t.classList.toggle("active", active);
+        t.setAttribute("aria-selected", String(active));
+      });
+      registerForm.style.display = mode === "register" ? "block" : "none";
+      loginForm.style.display = mode === "login" ? "block" : "none";
+      document.getElementById("authTitle").textContent = mode === "register" ? "Register your business" : "Log in";
+    }
+    authTabs.forEach((t) => t.addEventListener("click", () => setAuthTab(t.dataset.authtab)));
+
+    function openAuthModal(mode) {
+      setAuthTab(mode || "register");
+      authOverlay.hidden = false;
+      (mode === "login" ? document.getElementById("loginEmail") : document.getElementById("regBusinessName")).focus();
+    }
+    function closeAuthModal() {
+      authOverlay.hidden = true;
+      wsBtn.focus();
+    }
+    document.getElementById("authClose").addEventListener("click", closeAuthModal);
+    authOverlay.addEventListener("click", (e) => { if (e.target === authOverlay) closeAuthModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !authOverlay.hidden) closeAuthModal(); });
+
+    registerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById("registerMsg");
+      msgEl.innerHTML = "";
+      const body = {
+        businessName: document.getElementById("regBusinessName").value.trim(),
+        businessType: document.getElementById("regBusinessType").value,
+        description: document.getElementById("regDescription").value.trim(),
+        accentColor: regAccent,
+        email: document.getElementById("regEmail").value.trim(),
+        password: document.getElementById("regPassword").value,
+      };
+      const submitBtn = registerForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.message || (data.error === "EMAIL_TAKEN" ? "An account with that email already exists." : "Could not create the account."));
+        }
+        currentBusiness = data;
+        closeAuthModal();
+        renderWorkspaceMenu();
+        applyBusinessWorkspace(currentBusiness);
+        registerForm.reset();
+        renderSwatchPicker(document.getElementById("regSwatchPicker"), (regAccent = ACCENT_SWATCHES[0]), (hex) => { regAccent = hex; });
+      } catch (err) {
+        msgEl.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || "Could not create the account.")}</div>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById("loginMsg");
+      msgEl.innerHTML = "";
+      const body = {
+        email: document.getElementById("loginEmail").value.trim(),
+        password: document.getElementById("loginPassword").value,
+      };
+      const submitBtn = loginForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "Could not log in.");
+        currentBusiness = data;
+        closeAuthModal();
+        renderWorkspaceMenu();
+        applyBusinessWorkspace(currentBusiness);
+        loginForm.reset();
+      } catch (err) {
+        msgEl.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || "Could not log in.")}</div>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    const profileOverlay = document.getElementById("profileOverlay");
+    const profileForm = document.getElementById("profileForm");
+
+    function openProfileModal() {
+      if (!currentBusiness) return;
+      document.getElementById("profileEmailLine").textContent = currentBusiness.email;
+      document.getElementById("profBusinessName").value = currentBusiness.businessName;
+      document.getElementById("profBusinessType").value = currentBusiness.businessType;
+      document.getElementById("profDescription").value = currentBusiness.description || "";
+      profAccent = currentBusiness.accentColor;
+      renderSwatchPicker(document.getElementById("profSwatchPicker"), profAccent, (hex) => { profAccent = hex; });
+      document.getElementById("profileMsg").innerHTML = "";
+      profileOverlay.hidden = false;
+      document.getElementById("profBusinessName").focus();
+    }
+    function closeProfileModal() {
+      profileOverlay.hidden = true;
+      wsBtn.focus();
+    }
+    document.getElementById("profileClose").addEventListener("click", closeProfileModal);
+    profileOverlay.addEventListener("click", (e) => { if (e.target === profileOverlay) closeProfileModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !profileOverlay.hidden) closeProfileModal(); });
+
+    profileForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msgEl = document.getElementById("profileMsg");
+      msgEl.innerHTML = "";
+      const body = {
+        businessName: document.getElementById("profBusinessName").value.trim(),
+        businessType: document.getElementById("profBusinessType").value,
+        description: document.getElementById("profDescription").value.trim(),
+        accentColor: profAccent,
+      };
+      const submitBtn = profileForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      try {
+        const res = await fetch("/api/business/profile", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "Could not save changes.");
+        currentBusiness = data;
+        renderWorkspaceMenu();
+        applyBusinessWorkspace(currentBusiness);
+        msgEl.innerHTML = '<div class="form-msg success">Saved.</div>';
+      } catch (err) {
+        msgEl.innerHTML = `<div class="form-msg error">${escapeHtml(err.message || "Could not save changes.")}</div>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", handleLogout);
+
+    async function handleLogout() {
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch {
+        // Best-effort — even if the request fails, clear local UI state below
+        // so "Log out" never looks like it silently did nothing.
+      }
+      currentBusiness = null;
+      closeProfileModal();
+      renderWorkspaceMenu();
+      try { localStorage.removeItem("scs.workspace"); } catch {}
+      applyWorkspace("engineering");
+    }
+
+    // On load: is there already a session (cookie from an earlier visit)?
+    // Runs after the preset workspace above has already rendered the first
+    // frame, so a logged-out visitor sees the dashboard immediately instead
+    // of waiting on this request.
+    async function refreshAuthUI() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        currentBusiness = res.ok ? await res.json() : null;
+      } catch {
+        currentBusiness = null;
+      }
+      renderWorkspaceMenu();
+      if (currentBusiness && savedWorkspace === "mybusiness") {
+        applyBusinessWorkspace(currentBusiness, { silent: true });
+      }
+    }
+    refreshAuthUI();
+
+    // ============================================================
+    // Display currency
+    // Every order is created and stored in USD cents (amountCents) — that
+    // never changes here. This only converts what's shown on screen, using
+    // fixed approximate rates, so a team working in a different currency
+    // doesn't have to do the mental math on every figure. Rates are not
+    // live and are clearly labelled as approximate (see the "i" next to
+    // the picker) rather than pretending to be an FX feed.
+    // ============================================================
+    const CURRENCIES = {
+      USD: { symbol: "$", name: "US Dollar", rate: 1, decimals: 2 },
+      EUR: { symbol: "€", name: "Euro", rate: 0.92, decimals: 2 },
+      GBP: { symbol: "£", name: "British Pound", rate: 0.79, decimals: 2 },
+      INR: { symbol: "₹", name: "Indian Rupee", rate: 83.5, decimals: 2 },
+      JPY: { symbol: "¥", name: "Japanese Yen", rate: 149, decimals: 0 },
+      AUD: { symbol: "A$", name: "Australian Dollar", rate: 1.52, decimals: 2 },
+      CAD: { symbol: "C$", name: "Canadian Dollar", rate: 1.37, decimals: 2 },
+      SGD: { symbol: "S$", name: "Singapore Dollar", rate: 1.34, decimals: 2 },
+    };
+    const CURRENCY_ORDER = ["USD", "EUR", "GBP", "INR", "JPY", "AUD", "CAD", "SGD"];
+    let currentCurrency = "USD";
+
+    const currencySelect = document.getElementById("currencySelect");
+    currencySelect.innerHTML = CURRENCY_ORDER.map((code) =>
+      `<option value="${code}">${CURRENCIES[code].symbol} ${code}</option>`).join("");
+
+    function convertFromUsdCents(cents, code) {
+      const c = CURRENCIES[code] || CURRENCIES.USD;
+      return (cents / 100) * c.rate;
+    }
+
+    function fmtMoney(cents, code) {
+      const currency = code || currentCurrency;
+      const c = CURRENCIES[currency] || CURRENCIES.USD;
+      const amount = convertFromUsdCents(cents, currency);
+      return c.symbol + amount.toLocaleString(undefined, { minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals });
+    }
+
+    function setCurrency(code, opts) {
+      currentCurrency = CURRENCIES[code] ? code : "USD";
+      currencySelect.value = currentCurrency;
+      if (!opts || !opts.silent) {
+        try { localStorage.setItem("scs.currency", currentCurrency); } catch {}
+      }
+      // renderOrders() isn't defined/safe to call yet during the initial,
+      // pre-data-load setup below — refreshAll() at the bottom of this
+      // script renders the first frame once state exists. Later, user-driven
+      // changes (the select's "change" handler) always re-render live.
+      if (!opts || !opts.skipRender) renderOrders();
+    }
+
+    currencySelect.addEventListener("change", (e) => setCurrency(e.target.value));
+
+    let savedCurrency = "USD";
+    try { savedCurrency = localStorage.getItem("scs.currency") || "USD"; } catch {}
+    setCurrency(savedCurrency, { silent: true, skipRender: true });
 
     // ============================================================
     // Glossary / help modal
@@ -420,7 +900,6 @@
       SHIPPING_SCHEDULED: "var(--blue)",
     };
 
-    const fmtMoney = (cents) => "$" + (cents / 100).toFixed(2);
     const fmtTime = (ms) => new Date(ms).toLocaleString();
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -825,9 +1304,14 @@
     // ============================================================
     document.getElementById("exportCsvBtn").addEventListener("click", () => {
       const list = filteredOrders();
-      const header = ["order_id", "customer_id", "lines", "amount_usd", "status", "updated_at"];
+      const decimals = CURRENCIES[currentCurrency].decimals;
+      const header = ["order_id", "customer_id", "lines", "amount", "currency", "amount_usd", "status", "updated_at"];
       const rows = list.map((o) => [
-        o.id, o.customerId, o.lines.length, (o.amountCents / 100).toFixed(2), o.status, new Date(o.updatedAt).toISOString(),
+        o.id, o.customerId, o.lines.length,
+        convertFromUsdCents(o.amountCents, currentCurrency).toFixed(decimals),
+        currentCurrency,
+        (o.amountCents / 100).toFixed(2),
+        o.status, new Date(o.updatedAt).toISOString(),
       ]);
       const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

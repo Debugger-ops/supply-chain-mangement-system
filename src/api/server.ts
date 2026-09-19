@@ -8,9 +8,12 @@ import { PaymentGateway } from "../payments/paymentGateway.js";
 import { ShippingProvider } from "../shipping/shippingProvider.js";
 import { InMemoryOrderStore, type OrderStore } from "../orders/orderStore.js";
 import { PgOrderStore } from "../orders/pgOrderStore.js";
+import { InMemoryBusinessStore, type BusinessStore } from "../business/businessStore.js";
+import { PgBusinessStore } from "../business/pgBusinessStore.js";
 import { getPgPool } from "../lib/pgClient.js";
 import { SagaOrchestrator } from "../orders/sagaOrchestrator.js";
 import { ordersRouter } from "./routes/orders.js";
+import { businessRouter } from "./routes/business.js";
 import { inventoryRouter } from "./routes/inventory.js";
 import { metricsRouter } from "./routes/metrics.js";
 import { SseHub } from "./sseHub.js";
@@ -50,6 +53,17 @@ function buildOrderStore(): OrderStore {
   return new InMemoryOrderStore();
 }
 
+// Same ORDER_STORE=pg flag as buildOrderStore() above — it is the same
+// Postgres instance (docs/schema.sql defines both the orders tables and
+// businesses), so one flag is enough rather than a second env var to keep
+// in sync with it.
+function buildBusinessStore(): BusinessStore {
+  if (process.env.ORDER_STORE === "pg") {
+    return new PgBusinessStore(getPgPool());
+  }
+  return new InMemoryBusinessStore();
+}
+
 async function main() {
   const redis = await buildRedisClient();
   const eventBus = await buildEventBus();
@@ -58,6 +72,7 @@ async function main() {
   const payments = new PaymentGateway();
   const shipping = new ShippingProvider();
   const store = buildOrderStore();
+  const businessStore = buildBusinessStore();
   const saga = new SagaOrchestrator(inventory, payments, shipping, eventBus, store);
   const sseHub = new SseHub(eventBus);
 
@@ -65,6 +80,7 @@ async function main() {
   app.use(express.json());
 
   app.use("/api", ordersRouter(saga, store));
+  app.use("/api", businessRouter(businessStore));
   app.use("/api", inventoryRouter(inventory));
   app.use("/api", metricsRouter());
 
