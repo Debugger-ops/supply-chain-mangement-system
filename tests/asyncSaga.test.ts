@@ -38,23 +38,45 @@ describe("Async saga execution (wireAsyncSagaExecution)", () => {
     await redis?.quit();
   });
 
-  it("createOrder() resolves while the order is still CREATED, before the saga has run", async () => {
+  it("createOrder() resolves before the saga's first step ever runs, then the saga completes on its own", async () => {
     await inventory.setStock("wh-1", "sku-async-a", 10);
     const eventBus = new InMemoryEventBus();
     const store = new InMemoryOrderStore();
-    const saga = new SagaOrchestrator(inventory, new PaymentGateway(), new ShippingProvider(), eventBus, store);
+
+    // A real reservation call, real Redis round-trip included, is often
+    // fast enough (especially against an in-process test double — see
+    // tests/setup.ts's TEST_REDIS_DRIVER=memory) that createOrder()'s own
+    // handful of microtasks and the fire-and-forget saga's first step can
+    // race each other — a flaky thing to assert on either way. Gating
+    // reserve() behind a real macrotask (setTimeout) instead of relying on
+    // however fast the Redis backend happens to be makes the ordering
+    // deterministic: createOrder() only ever needs microtasks to resolve,
+    // so it is guaranteed to finish first regardless of backend speed.
+    let reserveCalls = 0;
+    class GatedInventoryService extends InventoryService {
+      async reserve(...args: Parameters<InventoryService["reserve"]>) {
+        reserveCalls++;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return super.reserve(...args);
+      }
+    }
+    const gatedInventory = new GatedInventoryService(redis);
+    await gatedInventory.setStock("wh-1", "sku-async-a", 10);
+
+    const saga = new SagaOrchestrator(gatedInventory, new PaymentGateway(), new ShippingProvider(), eventBus, store);
     wireAsyncSagaExecution(eventBus, saga);
 
     const orderId = await saga.createOrder("cust-async-1", [{ sku: "sku-async-a", qty: 1, warehouseId: "wh-1" }], 999);
 
-    // Immediately after createOrder() resolves — before yielding the event
-    // loop at all — the order must still be CREATED. If this were ever
-    // CONFIRMED here, the subscriber would have blocked publish() on the
-    // full saga run, exactly the synchronous-on-the-request-path behavior
-    // this feature removes.
+    // createOrder() has resolved, but the saga's very first step (the
+    // gated reserve() above) has not been allowed to finish yet — proof
+    // that the caller wasn't blocked on it. If wireAsyncSagaExecution ever
+    // regressed to awaiting run() inline, this would fail: createOrder()
+    // couldn't resolve until the 20ms gate opened.
     const justCreated = await store.get(orderId);
     expect(justCreated!.status).toBe("CREATED");
     expect(justCreated!.history).toHaveLength(0);
+    expect(reserveCalls).toBeLessThanOrEqual(1); // 0 (not yet called) or 1 (called, still awaiting the gate)
 
     // ...but the saga does complete shortly after, on its own.
     await waitFor(() => eventBus.history("orders").some((e) => e.type === "order.confirmed"));

@@ -31,6 +31,19 @@ GitHub | Live Demo
   (simulated network partition) resumes and replays every missed stock event
   on reconnect, converging to the same state as unaffected nodes with zero
   lost or duplicated events.
+- Made order creation asynchronous end-to-end: `POST /api/orders` returns
+  as soon as the order is persisted, with a dedicated event-bus subscriber
+  driving inventory/payment/shipping off the request path — instead of a
+  synchronous handler blocking on all three.
+- Added a crash-recovery sweep that finds any order left mid-saga after a
+  process death and rolls it back through the same idempotent compensating
+  transactions as a live failure, and proved it with a real chaos test that
+  SIGKILLs a subprocess mid-saga (not a graceful exit) and verifies a fresh
+  process recovers cleanly.
+- Added multi-tenant scoping: authenticated requests only ever see their own
+  business's orders (a `businessId` enforced at both the API and the
+  Postgres-store layer), while writes to shared warehouse inventory now
+  require a logged-in session instead of being open to anyone.
 - Shipped a pluggable infrastructure layer (Redis via a zero-dependency RESP
   client or `ioredis`; events via an in-memory bus or `kafkajs`) so the full
   correctness suite runs with nothing but Node and a local Redis instance,
@@ -71,3 +84,8 @@ in `tests/` once you've run it, including any you add.)*
    GET-then-SET isn't — that's the question this project is built to invite.
 4. Be ready to explain the difference between orchestration and choreography
    sagas, and why you picked orchestration here.
+5. Be ready to explain the chaos test (`tests/chaos.test.ts`) step by step —
+   why it uses `SIGKILL` and not `process.exit()`, and why recovery rolls
+   everything back to `CANCELLED` instead of trying to resume forward from
+   wherever the crash happened. It's a strong "tell me about a time you
+   tested a failure mode" answer if you actually understand it, not just ran it.

@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 npm-debug.log*
+
+# Vite/Vitest writes one of these each time it loads vitest.config.ts
+*.timestamp-*.mjs

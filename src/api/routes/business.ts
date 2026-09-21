@@ -47,11 +47,11 @@ function setSessionCookie(req: Request, res: Response, businessId: string): void
 }
 
 /**
- * Business accounts: register/login/logout/me and profile updates. This is
- * account-level auth for the dashboard's workspace branding (see README
- * "Known gaps") — it does not scope /api/orders or /api/inventory to the
- * logged-in business; those stay open, matching the rest of this demo's
- * single-tenant data model.
+ * Business accounts: register/login/logout/me and profile updates. This
+ * session is also the multi-tenant boundary for orders and the gate on
+ * writing to inventory — see src/api/routes/orders.ts's scopeFor() and
+ * src/api/routes/inventory.ts's PUT handler, and docs/architecture.md
+ * "Multi-tenant scoping" for the full rationale.
  */
 export function businessRouter(store: BusinessStore): Router {
   const router = Router();

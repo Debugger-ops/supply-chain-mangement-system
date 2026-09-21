@@ -16,16 +16,24 @@ import type { SagaOrchestrator } from "./sagaOrchestrator.js";
  * history survives the restart that triggered this sweep in the first
  * place.
  *
- * Known limitation, stated plainly (see README "Known gaps"): this sweep
- * has no distributed lock, so if you ever run more than one replica of this
- * app against the same Postgres, each replica's startup would race to
- * recover the same stuck orders. compensate()'s idempotency (release.lua,
- * PaymentGateway.refund) makes that race harmless rather than corrupting,
- * but it does mean a real multi-replica deployment should elect a single
- * leader to run this sweep (or use `SELECT ... FOR UPDATE SKIP LOCKED`)
- * instead of every replica doing it unconditionally on boot, which is fine
- * for this single-instance k8s Deployment (k8s/base) but is the honest next
- * step before scaling replicas past one.
+ * Known limitation, stated plainly (see README "Known gaps"): this sweep has
+ * no distributed lock, and k8s/base/app-deployment.yaml already runs 2+
+ * replicas by default (3+ under k8s/overlays/prod) — specifically because
+ * the whole point of this project is correctness *across* multiple
+ * concurrently-running instances (see docs/architecture.md's "Deployment
+ * topology"). So on a real rolling restart or a fresh rollout, every
+ * replica that boots runs this sweep against the same Postgres at close to
+ * the same time, each racing to recover the same handful of stuck orders.
+ * compensate()'s idempotency (release.lua's already-resolved-reservation
+ * check, PaymentGateway.refund's no-op-if-nothing-charged) makes that race
+ * harmless rather than corrupting — two replicas both calling
+ * recoverStuck() on the same order both just re-derive CANCELLED — but it
+ * is real wasted work (duplicate refund/cancel calls to the payment/
+ * shipping providers) that a single-instance deployment wouldn't have. The
+ * honest next step, not done here: elect one leader to run the sweep (a
+ * Postgres advisory lock, or `SELECT ... FOR UPDATE SKIP LOCKED` on the
+ * nonTerminal() query) instead of every replica doing it unconditionally on
+ * boot.
  */
 export async function recoverStuckOrders(store: OrderStore, saga: SagaOrchestrator): Promise<number> {
   const stuck = await store.nonTerminal();

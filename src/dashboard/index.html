@@ -1286,7 +1286,7 @@
           try { const parsed = JSON.parse(raw); message = parsed.message || parsed.error || raw; } catch {}
           throw new Error(message || `Request failed (${res.status})`);
         }
-        msgEl.innerHTML = '<div class="form-msg success">Order created.</div>';
+        msgEl.innerHTML = '<div class="form-msg success">Order submitted — watch the live feed below as it clears inventory, payment, and shipping.</div>';
         document.getElementById("ofCustomer").value = "";
         document.getElementById("ofAmount").value = "";
         document.getElementById("orderFormLines").innerHTML = "";

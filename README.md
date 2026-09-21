@@ -68,10 +68,25 @@ npm run dev
 ```bash
 npm install
 npm test                       # Vitest — needs a local Redis reachable at REDIS_HOST:REDIS_PORT (default 127.0.0.1:6379)
-                                # tests/pgOrderStore.test.ts also needs Postgres reachable at DATABASE_URL,
-                                # with the schema applied — `docker compose up postgres` provisions both.
+                                # tests/pgOrderStore.test.ts, tests/pgBusinessStore.test.ts,
+                                # tests/concurrency.pg.test.ts and tests/chaos.test.ts also need Postgres
+                                # reachable at DATABASE_URL, with the schema applied —
+                                # `docker compose up postgres` provisions both.
 npm run verify                 # zero-dependency verification script (tsx + raw RESP client), no npm install required beyond tsx
 ```
+
+No Redis reachable at all, and nothing available to install one with (a
+locked-down sandbox, no `docker`, no root)? `TEST_REDIS_DRIVER=memory npm
+test` points the suite at `InMemoryRedisClient`
+(`src/inventory/inMemoryRedis.ts`) instead — an in-process stand-in good
+enough to unblock most of the suite, but **not** a substitute for real Redis
+for anything that's actually testing cross-connection concurrency
+(`tests/concurrency.load.test.ts`'s multi-instance check opens its own raw
+connections and will still correctly fail without a real server — that's
+by design, not a bug). The Postgres-dependent files above have no in-memory
+equivalent; they need the real thing either way. Same idea for
+`npm run seed` / `npm run dev`: `REDIS_DRIVER=memory` (see
+`src/inventory/connectRedis.ts`) works with zero external infra.
 
 `npm run verify` is what produced the numbers in `docs/RESUME_BULLETS.md`
 and `docs/verify-output.txt` — run it yourself and quote your own output.
@@ -80,11 +95,11 @@ and `docs/verify-output.txt` — run it yourself and quote your own output.
 
 | Method | Path                                 | Description                          |
 |--------|---------------------------------------|---------------------------------------|
-| PUT    | `/api/inventory`                      | Set stock for a `{warehouseId, sku, qty}` |
+| PUT    | `/api/inventory`                      | Set stock for a `{warehouseId, sku, qty}` — requires a logged-in business |
 | GET    | `/api/inventory/:warehouseId/:sku`    | Get current available stock           |
-| POST   | `/api/orders`                         | Create and run an order through the saga |
-| GET    | `/api/orders/:id`                     | Get one order (status + full history) |
-| GET    | `/api/orders`                         | List all orders                       |
+| POST   | `/api/orders`                         | Create an order; returns `202` immediately (`CREATED`) — the saga runs asynchronously, see `GET /api/orders/:id` |
+| GET    | `/api/orders/:id`                     | Get one order (status + full history) — scoped to the caller's business, or the anonymous pool if logged out |
+| GET    | `/api/orders`                         | List the caller's own orders (or the anonymous pool if logged out) |
 | GET    | `/api/events/stream`                  | Server-Sent Events feed of saga transitions |
 | GET    | `/metrics`                            | Plain-text metrics snapshot           |
 | POST   | `/api/auth/register`                  | Register a business account (name, type, description, accent color) and start a session |
@@ -155,33 +170,67 @@ k8s/
 ## Known gaps / next steps
 
 Being upfront about what this doesn't cover yet, since an interviewer will
-probe exactly these:
+probe exactly these. Four items that used to live in this section —
+multi-tenant scoping, the Postgres recovery sweep, a real chaos test, and
+async saga execution — are done now; what's below is what closing them
+actually looked like, including what's still genuinely open.
 
-- `PgOrderStore` (a Postgres-backed `OrderStore`, `docs/schema.sql`) is
-  implemented and wired in behind `ORDER_STORE=pg` (see `.env.example`,
-  `docker-compose.yml`'s `app` service, `k8s/base/app-configmap.yaml`) —
-  `InMemoryOrderStore` remains the default and is what the test suite uses
-  unless a test explicitly opts into Postgres (`tests/pgOrderStore.test.ts`).
-  Not yet done: the recovery sweep for an order stuck mid-saga after a
-  restart (see "Chaos/fault-injection" below) and re-running
-  `tests/concurrency.load.test.ts` against `PgOrderStore` specifically.
-- Authentication (`src/auth/`, `src/business/`) covers business accounts
-  only — register/login/profile at `/api/auth/*` and `/api/business/profile`,
-  sessions as HMAC-signed HttpOnly cookies (scrypt-hashed passwords, both via
-  Node's built-in `node:crypto`, no new dependency). It does **not** scope
-  `/api/orders` or `/api/inventory` to the logged-in business — those stay
-  open, matching this demo's single-tenant data model. Multi-tenant scoping
-  (a `businessId` on orders/inventory, enforced per request) is the natural
-  next step, not yet done. `PgBusinessStore` exists behind the same
-  `ORDER_STORE=pg` flag as `PgOrderStore` but isn't covered by
-  `tests/pgOrderStore.test.ts`-style Postgres integration tests yet.
-- The saga is synchronous end-to-end within one HTTP request; a production
-  version would likely make `POST /api/orders` return immediately after
-  `order.created` and drive the rest of the saga asynchronously off the
-  event bus, with `GET /api/orders/:id` used for polling/status.
-- No chaos/fault-injection test that kills the process mid-saga and verifies
-  recovery on restart (the TTL-based auto-release covers the Redis side of
-  this, but there's no automated test for it yet).
+- **Multi-tenant scoping**, done for orders: every `Order` carries a
+  `businessId` (`docs/schema.sql`, `src/types.ts`), stamped from the
+  logged-in business's session when `POST /api/orders` creates it, and
+  `GET /api/orders` / `GET /api/orders/:id` only ever return an
+  authenticated caller's own orders, or the shared anonymous/demo pool
+  (`businessId: null`) if logged out — never a mix (`src/api/routes/orders.ts`'s
+  `scopeFor()`, `tests/multitenant.test.ts`, `tests/pgOrderStore.test.ts`).
+  `PUT /api/inventory` now requires a logged-in business, closing an actual
+  gap (anyone could previously overwrite any warehouse's stock
+  unauthenticated). What's **not** partitioned per business: warehouse
+  stock levels stay a shared resource — `GET /api/inventory` is still
+  public, and Redis stock keys are still just `warehouseId:sku`, not
+  `businessId:warehouseId:sku`. That's a deliberate scope decision, not an
+  oversight: warehouses are modeled here as shared 3PL infrastructure a
+  business plugs into, not one private warehouse network per tenant, and
+  partitioning Redis itself would touch `reserve.lua`/`release.lua` and
+  every concurrency test for comparatively little of what an interviewer
+  actually asks about. See `docs/architecture.md`'s "Multi-tenant scoping"
+  for the full writeup. An existing `docker compose` Postgres volume needs
+  `docs/migrations/002_add_business_id_to_orders.sql` run once; a fresh one
+  picks the column up automatically from `docs/schema.sql`.
+- **Async saga execution**, done: `POST /api/orders` now returns `202
+  Accepted` with the order in `CREATED` status as soon as it's persisted and
+  `order.created` is published — it does not wait for payment/shipping. A
+  dedicated event-bus subscriber (`src/orders/asyncSagaRunner.ts`) drives
+  the rest of the saga off to the side; poll `GET /api/orders/:id`, or watch
+  `GET /api/events/stream`, for the outcome. `tests/asyncSaga.test.ts`
+  proves the caller isn't blocked on the full run.
+- **Startup recovery sweep**, done: `src/orders/recoverStuckOrders.ts` runs
+  once at boot, finds every order not yet in a terminal status
+  (`OrderStore.nonTerminal()`), and rolls each one back to `CANCELLED`
+  through the exact same idempotent compensating-transaction path every
+  other saga failure already uses (`SagaOrchestrator.recoverStuck()`) —
+  covered by `tests/recovery.test.ts` at the unit level and by
+  `tests/chaos.test.ts` end-to-end (see next bullet). **Residual gap,
+  stated plainly:** this sweep has no distributed lock, and
+  `k8s/base/app-deployment.yaml` runs 2+ replicas by default (3+ under
+  `k8s/overlays/prod`) specifically to prove the no-oversell guarantee
+  holds across instances — so a real rolling restart has every replica
+  racing to recover the same stuck orders at once. Idempotency makes that
+  harmless rather than corrupting, but it's still duplicate refund/cancel
+  calls a single elected leader (a Postgres advisory lock, or `SELECT ...
+  FOR UPDATE SKIP LOCKED` on the `nonTerminal()` query) should be doing
+  instead. Not done.
+- **Chaos/fault-injection test**, done: `tests/chaos.test.ts` spawns
+  `scripts/chaos/crash-mid-saga.ts` as a real child process, lets it reserve
+  inventory and durably record `INVENTORY_RESERVED` in Postgres, then
+  `SIGKILL`s it — no graceful shutdown, no cleanup — and verifies the
+  recovery sweep above finds that stuck order on a fresh process and cleanly
+  rolls it back, with a second recovery pass proving idempotency.
+- Two coverage gaps this also closed: `tests/concurrency.pg.test.ts`
+  re-runs `tests/concurrency.load.test.ts`'s scenario specifically against
+  `PgOrderStore` (concurrent saga runs writing to Postgres, not just
+  `InventoryService`/Redis), and `tests/pgBusinessStore.test.ts` gives
+  `PgBusinessStore` the same kind of Postgres integration coverage
+  `tests/pgOrderStore.test.ts` already had. Both were previously missing.
 - The Kubernetes manifests (`k8s/`) were written and YAML-validated in an
   environment without `kubectl`/`kind` available to run a live deploy —
   see `k8s/README.md`'s "Honest limitations" section before treating them
