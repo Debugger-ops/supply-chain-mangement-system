@@ -1,9 +1,10 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createIoRedisClient, RawRespClient, type RedisLike } from "../lib/redisClient.js";
+import { type RedisLike } from "../lib/redisClient.js";
 import { InMemoryEventBus, createKafkaEventBus, type EventBus } from "../lib/eventBus.js";
 import { InventoryService } from "../inventory/inventoryService.js";
+import { connectRedis } from "../inventory/connectRedis.js";
 import { PaymentGateway } from "../payments/paymentGateway.js";
 import { ShippingProvider } from "../shipping/shippingProvider.js";
 import { InMemoryOrderStore, type OrderStore } from "../orders/orderStore.js";
@@ -12,6 +13,8 @@ import { InMemoryBusinessStore, type BusinessStore } from "../business/businessS
 import { PgBusinessStore } from "../business/pgBusinessStore.js";
 import { getPgPool } from "../lib/pgClient.js";
 import { SagaOrchestrator } from "../orders/sagaOrchestrator.js";
+import { wireAsyncSagaExecution } from "../orders/asyncSagaRunner.js";
+import { recoverStuckOrders } from "../orders/recoverStuckOrders.js";
 import { ordersRouter } from "./routes/orders.js";
 import { businessRouter } from "./routes/business.js";
 import { inventoryRouter } from "./routes/inventory.js";
@@ -22,14 +25,9 @@ import { metricsSnapshotText } from "../metrics/metrics.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildRedisClient(): Promise<RedisLike> {
-  // REDIS_DRIVER=ioredis (recommended once `npm install` has run) talks to
-  // REDIS_URL via the real ioredis client. Defaults to the zero-dependency
-  // RawRespClient so `npm run dev` works even before dependencies are
-  // installed, against a local `redis-server`.
-  if (process.env.REDIS_DRIVER === "ioredis") {
-    return createIoRedisClient(process.env.REDIS_URL ?? "redis://127.0.0.1:6379");
-  }
-  return new RawRespClient(process.env.REDIS_HOST ?? "127.0.0.1", Number(process.env.REDIS_PORT ?? 6379));
+  // See src/inventory/connectRedis.ts for the REDIS_DRIVER=ioredis/memory/
+  // raw switch — shared with scripts/seed.ts so the two can't drift.
+  return connectRedis();
 }
 
 async function buildEventBus(): Promise<EventBus> {
@@ -74,6 +72,17 @@ async function main() {
   const store = buildOrderStore();
   const businessStore = buildBusinessStore();
   const saga = new SagaOrchestrator(inventory, payments, shipping, eventBus, store);
+
+  // Drive the saga off the event bus instead of inline on the request path
+  // (see orders/asyncSagaRunner.ts) — must be wired before anything can
+  // publish order.created, i.e. before the HTTP routes below go live.
+  wireAsyncSagaExecution(eventBus, saga);
+
+  // Roll back any order a previous process left mid-saga (see
+  // orders/recoverStuckOrders.ts) before accepting new traffic, so a
+  // crash-and-restart never leaves a customer-visible order silently stuck.
+  await recoverStuckOrders(store, saga);
+
   const sseHub = new SseHub(eventBus);
 
   const app = express();

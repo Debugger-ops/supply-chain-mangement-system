@@ -7,10 +7,24 @@ import { getPgPool } from "../src/lib/pgClient.js";
 // suite runs the same way in this repo's own CI sandbox and on a laptop
 // with `ioredis` installed. Set TEST_REDIS_DRIVER=ioredis to run the same
 // suite against the production client instead.
+//
+// TEST_REDIS_DRIVER=memory is a third, deliberately-separate option: it
+// points tests at InMemoryRedisClient (src/inventory/inMemoryRedis.ts)
+// instead of a real Redis, for a sandbox with no way to run one at all. Use
+// it to unblock a local run, not to trust the result the way you'd trust a
+// real pass — anything gated on cross-connection atomicity (most notably
+// tests/concurrency.load.test.ts's multi-instance check, which opens its
+// own RawRespClient()s directly rather than going through this helper)
+// isn't actually exercised by a single in-process Map and will still fail,
+// by design, exactly like scripts/verify.ts staying on RawRespClient.
 export async function getTestRedisClient() {
   if (process.env.TEST_REDIS_DRIVER === "ioredis") {
     const { createIoRedisClient } = await import("../src/lib/redisClient.js");
     return createIoRedisClient(process.env.REDIS_URL ?? "redis://127.0.0.1:6379");
+  }
+  if (process.env.TEST_REDIS_DRIVER === "memory") {
+    const { InMemoryRedisClient } = await import("../src/inventory/inMemoryRedis.js");
+    return new InMemoryRedisClient();
   }
   return new RawRespClient(process.env.REDIS_HOST ?? "127.0.0.1", Number(process.env.REDIS_PORT ?? 6379));
 }

@@ -4,6 +4,7 @@ import type { PaymentGateway } from "../payments/paymentGateway.js";
 import type { ShippingProvider } from "../shipping/shippingProvider.js";
 import type { EventBus } from "../lib/eventBus.js";
 import type { OrderStore } from "./orderStore.js";
+import { isTerminalStatus } from "./orderStore.js";
 import type { Order, OrderId, OrderLine } from "../types.js";
 import { metrics } from "../metrics/metrics.js";
 
@@ -24,6 +25,15 @@ const ORDERS_TOPIC = "orders";
  * events with no central coordinator) — orchestration trades some coupling
  * for a saga history that's trivial to audit and reason about, which is the
  * right trade for a single order-fulfillment flow like this one.
+ *
+ * Execution is asynchronous from the caller's point of view: createOrder()
+ * only persists the order and publishes order.created — it does not run the
+ * saga. api/server.ts wires a dedicated event-bus subscriber
+ * (orders/asyncSagaRunner.ts's wireAsyncSagaExecution) that calls run() in
+ * response to that event, off the request path, so POST /api/orders can
+ * respond as soon as the order exists instead of blocking on payment/
+ * shipping. Tests and scripts/verify.ts that want the old fully-synchronous
+ * behavior just call createOrder() then run() directly, as before.
  */
 export class SagaOrchestrator {
   constructor(
@@ -34,10 +44,16 @@ export class SagaOrchestrator {
     private store: OrderStore
   ) {}
 
-  async createOrder(customerId: string, lines: OrderLine[], amountCents: number): Promise<OrderId> {
+  async createOrder(
+    customerId: string,
+    lines: OrderLine[],
+    amountCents: number,
+    businessId: string | null = null
+  ): Promise<OrderId> {
     const order: Order = {
       id: randomUUID(),
       customerId,
+      businessId,
       lines,
       amountCents,
       status: "CREATED",
@@ -46,7 +62,7 @@ export class SagaOrchestrator {
       updatedAt: Date.now(),
     };
     await this.store.create(order);
-    await this.publish(order.id, "order.created", { customerId, lines, amountCents });
+    await this.publish(order.id, "order.created", { customerId, lines, amountCents, businessId });
     return order.id;
   }
 
@@ -96,6 +112,42 @@ export class SagaOrchestrator {
   }
 
   /**
+   * Recovery path for an order a crashed process left mid-saga (see
+   * api/server.ts's startup recovery sweep and tests/chaos.test.ts). We
+   * never try to resume forward from wherever the saga stopped — there's no
+   * way to know, from persisted state alone, whether an in-flight payment or
+   * shipping call actually landed on the other side before the crash. The
+   * only response that's safe regardless is the one this whole saga is
+   * built around: unwind whatever the order's history proves already
+   * happened, via the same compensate() every other failure path uses,
+   * which is idempotent by construction (release.lua, PaymentGateway.refund)
+   * so it's safe even if a step had already partially compensated before
+   * the crash that interrupted THIS recovery attempt.
+   *
+   * A no-op for an order already in a terminal status.
+   */
+  async recoverStuck(order: Order): Promise<Order> {
+    if (isTerminalStatus(order.status)) return order;
+
+    const reservations = this.reservationsFromHistory(order);
+    const completed = {
+      paid: order.history.some((h) => h.type === "order.payment_charged"),
+      shipped: order.history.some((h) => h.type === "order.shipping_scheduled"),
+    };
+    await this.compensate(order, reservations, completed);
+    await this.fail(order.id, "RECOVERED_AFTER_RESTART", { previousStatus: order.status });
+    return this.mustGet(order.id);
+  }
+
+  private reservationsFromHistory(order: Order): Array<{ warehouseId: string; sku: string; reservationId: string }> {
+    const reservedEvent = order.history.find((h) => h.type === "order.inventory_reserved");
+    const reservations = reservedEvent?.detail?.reservations as
+      | Array<{ warehouseId: string; sku: string; reservationId: string }>
+      | undefined;
+    return reservations ?? [];
+  }
+
+  /**
    * Compensating transactions, run in reverse order of what actually
    * succeeded. Every compensation call is idempotent (see release.lua and
    * PaymentGateway.refund), so re-running compensate() after a crash
@@ -142,3 +194,5 @@ export class SagaOrchestrator {
     return order;
   }
 }
+
+export { ORDERS_TOPIC };

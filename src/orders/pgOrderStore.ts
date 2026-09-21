@@ -1,10 +1,11 @@
 import type { Pool } from "pg";
 import type { Order, OrderEvent, OrderId, OrderLine, OrderStatus } from "../types.js";
-import type { OrderStore } from "./orderStore.js";
+import { TERMINAL_ORDER_STATUSES, type OrderStore } from "./orderStore.js";
 
 interface OrderRow {
   id: string;
   customer_id: string;
+  business_id: string | null;
   amount_cents: number;
   status: OrderStatus;
   created_at: Date;
@@ -25,6 +26,11 @@ interface OrderEventRow {
   at: Date;
 }
 
+// Postgres placeholder list for `status NOT IN (...)`, built once from the
+// same TERMINAL_ORDER_STATUSES set orderStore.ts uses for InMemoryOrderStore
+// — one source of truth for "what counts as done" shared by both stores.
+const TERMINAL_STATUS_LIST = [...TERMINAL_ORDER_STATUSES];
+
 /**
  * Postgres-backed OrderStore (docs/schema.sql). Selected via ORDER_STORE=pg
  * in server.ts; InMemoryOrderStore remains the default and is what the test
@@ -42,9 +48,9 @@ export class PgOrderStore implements OrderStore {
     try {
       await client.query("BEGIN");
       await client.query(
-        `INSERT INTO orders (id, customer_id, amount_cents, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0), to_timestamp($6 / 1000.0))`,
-        [order.id, order.customerId, order.amountCents, order.status, order.createdAt, order.updatedAt]
+        `INSERT INTO orders (id, customer_id, business_id, amount_cents, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), to_timestamp($7 / 1000.0))`,
+        [order.id, order.customerId, order.businessId, order.amountCents, order.status, order.createdAt, order.updatedAt]
       );
       for (const line of order.lines) {
         await client.query(
@@ -61,8 +67,17 @@ export class PgOrderStore implements OrderStore {
     }
   }
 
-  async get(id: OrderId): Promise<Order | undefined> {
-    const orderResult = await this.pool.query<OrderRow>(`SELECT * FROM orders WHERE id = $1`, [id]);
+  async get(id: OrderId, businessId?: string | null): Promise<Order | undefined> {
+    const params: unknown[] = [id];
+    let where = `id = $1`;
+    if (businessId !== undefined) {
+      // business_id IS NOT DISTINCT FROM $2 so a lookup for the anonymous
+      // pool (businessId === null) matches NULL rows too — plain `=` never
+      // matches NULL in SQL.
+      where += ` AND business_id IS NOT DISTINCT FROM $2`;
+      params.push(businessId);
+    }
+    const orderResult = await this.pool.query<OrderRow>(`SELECT * FROM orders WHERE ${where}`, params);
     const orderRow = orderResult.rows[0];
     if (!orderRow) return undefined;
 
@@ -94,13 +109,40 @@ export class PgOrderStore implements OrderStore {
     }
   }
 
-  async all(): Promise<Order[]> {
-    const orderResult = await this.pool.query<OrderRow>(`SELECT * FROM orders ORDER BY created_at ASC`);
-    const ids = orderResult.rows.map((r) => r.id);
-    if (ids.length === 0) return [];
+  async all(businessId?: string | null): Promise<Order[]> {
+    const params: unknown[] = [];
+    let where = "";
+    if (businessId !== undefined) {
+      params.push(businessId);
+      where = `WHERE business_id IS NOT DISTINCT FROM $1`;
+    }
+    const orderResult = await this.pool.query<OrderRow>(
+      `SELECT * FROM orders ${where} ORDER BY created_at ASC`,
+      params
+    );
+    return this.hydrateAll(orderResult.rows);
+  }
 
+  /**
+   * Every order not yet in a terminal status — what the startup recovery
+   * sweep (SagaOrchestrator.recoverStuck, wired up in api/server.ts) scans
+   * for orders a crashed process left mid-saga. A single indexed query
+   * (idx_orders_status, docs/schema.sql) rather than all() + a JS filter, so
+   * recovery on startup doesn't pull the whole orders table for this check.
+   */
+  async nonTerminal(): Promise<Order[]> {
+    const orderResult = await this.pool.query<OrderRow>(
+      `SELECT * FROM orders WHERE status <> ALL($1::text[]) ORDER BY created_at ASC`,
+      [TERMINAL_STATUS_LIST]
+    );
+    return this.hydrateAll(orderResult.rows);
+  }
+
+  private async hydrateAll(rows: OrderRow[]): Promise<Order[]> {
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) return [];
     const [lines, history] = await Promise.all([this.linesFor(ids), this.eventsFor(ids)]);
-    return orderResult.rows.map((row) => this.toOrder(row, lines.get(row.id) ?? [], history.get(row.id) ?? []));
+    return rows.map((row) => this.toOrder(row, lines.get(row.id) ?? [], history.get(row.id) ?? []));
   }
 
   // Batched fetch helpers: one query for N orders' lines, one for N orders'
@@ -138,6 +180,7 @@ export class PgOrderStore implements OrderStore {
     return {
       id: row.id,
       customerId: row.customer_id,
+      businessId: row.business_id,
       lines,
       amountCents: row.amount_cents,
       status: row.status,

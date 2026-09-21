@@ -4,8 +4,9 @@ import { z } from "zod";
 import { asyncHandler } from "../asyncHandler.js";
 import type { BusinessStore } from "../../business/businessStore.js";
 import { hashPassword, verifyPassword } from "../../auth/passwords.js";
-import { createSessionToken, verifySessionToken } from "../../auth/session.js";
-import { parseCookies, serializeClearCookie, serializeSessionCookie, SESSION_COOKIE_NAME } from "../../auth/cookies.js";
+import { createSessionToken } from "../../auth/session.js";
+import { serializeClearCookie, serializeSessionCookie } from "../../auth/cookies.js";
+import { currentBusinessId } from "../../auth/currentBusiness.js";
 import type { Business, PublicBusiness } from "../../types.js";
 
 const BUSINESS_TYPES = ["b2c", "b2b2b", "b2b", "other"] as const;
@@ -39,10 +40,6 @@ const profileUpdateSchema = z
 function toPublic(business: Business): PublicBusiness {
   const { passwordHash: _passwordHash, ...pub } = business;
   return pub;
-}
-
-function currentBusinessId(req: Request): string | undefined {
-  return verifySessionToken(parseCookies(req.headers.cookie)[SESSION_COOKIE_NAME]);
 }
 
 function setSessionCookie(req: Request, res: Response, businessId: string): void {

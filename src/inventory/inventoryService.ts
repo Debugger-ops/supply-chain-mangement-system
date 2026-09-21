@@ -1,14 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
 import type { RedisLike } from "../lib/redisClient.js";
 import type { ReservationResult, Sku, WarehouseId } from "../types.js";
 import { metrics } from "../metrics/metrics.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RESERVE_SCRIPT = readFileSync(path.join(__dirname, "reserve.lua"), "utf8");
-const RELEASE_SCRIPT = readFileSync(path.join(__dirname, "release.lua"), "utf8");
+import { RESERVE_SCRIPT, RELEASE_SCRIPT } from "./scripts.js";
 
 const DEFAULT_RESERVATION_TTL_SECONDS = 60 * 15; // auto-release if a saga never resolves
 

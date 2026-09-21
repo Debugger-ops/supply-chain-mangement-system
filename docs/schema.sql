@@ -2,9 +2,16 @@
 -- OrderStore interface against this schema). Not required for local dev —
 -- InMemoryOrderStore is used by default and by the test suite.
 
+-- business_id is nullable and deliberately has no FOREIGN KEY to
+-- businesses(id): an order placed without a logged-in session (the
+-- anonymous/demo pool — see src/types.ts's Order.businessId) is a normal,
+-- supported state, not a data integrity problem. It's indexed below because
+-- every scoped query (PgOrderStore.get/all with a businessId, src/api/routes
+-- /orders.ts) filters on it.
 CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY,
   customer_id TEXT NOT NULL,
+  business_id UUID,
   amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
   status TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -29,6 +36,7 @@ CREATE TABLE IF NOT EXISTS order_events (
 
 CREATE INDEX IF NOT EXISTS idx_order_events_order_id ON order_events (order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+CREATE INDEX IF NOT EXISTS idx_orders_business_id ON orders (business_id);
 
 -- Registered businesses (src/business/businessStore.ts's BusinessStore
 -- interface, PgBusinessStore implementation) — one row per registered

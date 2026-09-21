@@ -1,15 +1,15 @@
 // Seeds a few SKUs with starting stock so the API/dashboard has something to
 // demo against. Run with `npm run seed` (uses the same REDIS_DRIVER as the
-// server — see .env.example).
+// server — see .env.example). No Redis reachable and nothing to install it
+// with? Run `REDIS_DRIVER=memory npm run seed` instead — see
+// src/inventory/connectRedis.ts and src/inventory/inMemoryRedis.ts for what
+// that trades away.
 
-import { RawRespClient, createIoRedisClient } from "../src/lib/redisClient.js";
+import { connectRedis } from "../src/inventory/connectRedis.js";
 import { InventoryService } from "../src/inventory/inventoryService.js";
 
 async function main() {
-  const redis =
-    process.env.REDIS_DRIVER === "ioredis"
-      ? await createIoRedisClient(process.env.REDIS_URL ?? "redis://127.0.0.1:6379")
-      : new RawRespClient(process.env.REDIS_HOST ?? "127.0.0.1", Number(process.env.REDIS_PORT ?? 6379));
+  const redis = await connectRedis();
 
   const inventory = new InventoryService(redis);
   const seedData = [

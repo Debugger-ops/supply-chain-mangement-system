@@ -43,6 +43,18 @@ export interface Order {
   history: OrderEvent[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * The business (see Business below) that placed this order through an
+   * authenticated dashboard session, or null for an order created without
+   * logging in. This is the tenancy boundary for orders: GET /api/orders and
+   * GET /api/orders/:id (src/api/routes/orders.ts) only ever return an
+   * authenticated caller's own businessId, or the shared null-businessId
+   * pool for anonymous/demo browsing — never another business's orders. See
+   * README "Known gaps" for the full rationale (orders are tenant-owned;
+   * warehouse inventory, elsewhere, is treated as shared 3PL infrastructure
+   * instead of being partitioned the same way).
+   */
+  businessId: string | null;
 }
 
 export interface OrderEvent {
