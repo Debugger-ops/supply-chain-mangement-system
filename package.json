@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/api/server.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/inventory && cp src/inventory/*.lua dist/inventory/",
     "start": "node dist/api/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
